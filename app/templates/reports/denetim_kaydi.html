@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% set active = 'reports' %}
+{% block title %}Denetim Kaydı{% endblock %}
+{% block heading %}Denetim Kaydı{% endblock %}
+{% block crumb %}Sistem aktivite geçmişi{% endblock %}
+
+{% block content %}
+
+{% set islem_renk = {'oluştur': 'badge-green', 'ekle': 'badge-green', 'güncelle': 'badge-amber', 'sil': 'badge-red', 'giris': 'badge-blue'} %}
+
+<!-- KPI şeridi -->
+{% if logs %}
+{% set islem_sayilari = {} %}
+<div class="dn-kpi-row">
+    <div class="dn-kpi">
+        <div class="dn-kpi-ico" style="background:var(--primary)18; color:var(--primary);">📋</div>
+        <div><div class="dn-kpi-lbl">Toplam İşlem</div><div class="dn-kpi-val">{{ logs|length }}</div></div>
+    </div>
+    <div class="dn-kpi">
+        <div class="dn-kpi-ico" style="background:#10b98118; color:#10b981;">✅</div>
+        <div><div class="dn-kpi-lbl">Oluşturma</div><div class="dn-kpi-val" style="color:var(--success);">{{ logs|selectattr('islem','in',['oluştur','ekle'])|list|length }}</div></div>
+    </div>
+    <div class="dn-kpi">
+        <div class="dn-kpi-ico" style="background:#f59e0b18; color:#f59e0b;">✏️</div>
+        <div><div class="dn-kpi-lbl">Güncelleme</div><div class="dn-kpi-val" style="color:var(--warning);">{{ logs|selectattr('islem','equalto','güncelle')|list|length }}</div></div>
+    </div>
+    <div class="dn-kpi">
+        <div class="dn-kpi-ico" style="background:#ef444418; color:#ef4444;">🗑️</div>
+        <div><div class="dn-kpi-lbl">Silme</div><div class="dn-kpi-val" style="color:var(--danger);">{{ logs|selectattr('islem','equalto','sil')|list|length }}</div></div>
+    </div>
+</div>
+{% endif %}
+
+<div class="dn-grid">
+
+    <!-- Aktivite akışı -->
+    <div class="card">
+        <div class="card-head">
+            <h3>Aktivite Geçmişi</h3>
+            {% if logs %}<span class="badge badge-blue">Son {{ logs|length }} kayıt</span>{% endif %}
+        </div>
+        {% if logs %}
+        <div class="dn-timeline">
+            {% for log in logs %}
+            {% set ic = log.islem or '' %}
+            {% set renk_cls = islem_renk.get(ic, 'badge-blue') %}
+            <div class="dn-item">
+                <div class="dn-dot-wrap">
+                    <div class="dn-dot {{ renk_cls }}"></div>
+                    {% if not loop.last %}<div class="dn-line"></div>{% endif %}
+                </div>
+                <div class="dn-content">
+                    <div class="dn-content-top">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div class="dn-avatar">{{ (log.kullanici_adi or '?')[0]|upper }}</div>
+                            <div>
+                                <span style="font-weight:600; font-size:.88rem;">{{ log.kullanici_adi or '—' }}</span>
+                                <span class="badge {{ renk_cls }}" style="margin-left:6px; font-size:.7rem;">{{ ic or '—' }}</span>
+                                {% if log.tablo %}
+                                <code style="font-size:.75rem; background:var(--border); padding:1px 6px; border-radius:4px; margin-left:4px;">{{ log.tablo }}</code>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <span class="muted" style="font-size:.75rem; white-space:nowrap;">{{ log.tarih or '—' }}</span>
+                    </div>
+                    {% if log.detay %}
+                    <div class="dn-detay">{{ log.detay }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty" style="padding:40px 0;">
+            <div class="big">📋</div>
+            <p>Henüz denetim kaydı yok.</p>
+            <p class="muted" style="font-size:.86rem;">Sistem işlemleri burada listelenecek.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sağ panel: tablo bazlı özet -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        {% if logs %}
+        <div class="card">
+            <div class="card-head"><h3>Tablo Bazlı İşlemler</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:8px;">
+                {% set tablolar = logs|map(attribute='tablo')|select|unique|list %}
+                {% for tablo in tablolar[:8] %}
+                {% set cnt = logs|selectattr('tablo','equalto',tablo)|list|length %}
+                <div>
+                    <div style="display:flex; justify-content:space-between; font-size:.83rem; margin-bottom:4px;">
+                        <code style="background:var(--border); padding:1px 6px; border-radius:4px;">{{ tablo }}</code>
+                        <span class="badge badge-blue">{{ cnt }}</span>
+                    </div>
+                    <div style="height:5px; background:var(--border); border-radius:999px;">
+                        <div style="height:100%; width:{{ [(cnt / (logs|length) * 100)|int, 100]|min }}%; background:var(--grad); border-radius:999px;"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Kullanıcı Aktivitesi</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px;">
+                {% set kullanicilar = logs|map(attribute='kullanici_adi')|select|unique|list %}
+                {% for kull in kullanicilar[:6] %}
+                {% set cnt = logs|selectattr('kullanici_adi','equalto',kull)|list|length %}
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div class="dn-avatar" style="flex-shrink:0;">{{ (kull or '?')[0]|upper }}</div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:.85rem; font-weight:600;">{{ kull }}</div>
+                        <div style="height:4px; background:var(--border); border-radius:999px; margin-top:4px;">
+                            <div style="height:100%; width:{{ [(cnt/(logs|length)*100)|int, 100]|min }}%; background:var(--grad); border-radius:999px;"></div>
+                        </div>
+                    </div>
+                    <span class="badge badge-blue">{{ cnt }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div style="background:rgba(99,102,241,.06); border:1px solid rgba(99,102,241,.2); border-radius:var(--radius-sm); padding:14px 16px;">
+            <div style="font-weight:700; font-size:.85rem; margin-bottom:6px;">ℹ️ Denetim Kaydı Hakkında</div>
+            <div class="muted" style="font-size:.8rem; line-height:1.6;">
+                Tüm sistem işlemleri otomatik olarak kaydedilir.
+                Bu kayıtlar değiştirilemez ve silinmez.
+                Son {{ logs|length if logs else 0 }} işlem görüntüleniyor.
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+.dn-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+@media(max-width:900px){ .dn-kpi-row{ grid-template-columns:repeat(2,1fr); } }
+.dn-kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; display:flex; align-items:center; gap:14px; }
+.dn-kpi-ico { width:44px; height:44px; border-radius:var(--radius-sm); display:grid; place-items:center; font-size:1.3rem; flex-shrink:0; }
+.dn-kpi-lbl { font-size:.75rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+.dn-kpi-val { font-size:1.25rem; font-weight:800; margin-top:2px; }
+
+.dn-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:16px; }
+@media(max-width:900px){ .dn-grid{ grid-template-columns:1fr; } }
+
+.dn-timeline { padding:16px 20px; display:flex; flex-direction:column; }
+.dn-item { display:flex; gap:12px; }
+.dn-dot-wrap { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+.dn-dot { width:10px; height:10px; border-radius:50%; margin-top:6px; flex-shrink:0; }
+.dn-dot.badge-green { background:var(--success); }
+.dn-dot.badge-amber { background:var(--warning); }
+.dn-dot.badge-red { background:var(--danger); }
+.dn-dot.badge-blue { background:var(--primary); }
+.dn-line { width:2px; flex:1; background:var(--border); margin:4px 0; min-height:12px; }
+.dn-content { flex:1; padding-bottom:16px; min-width:0; }
+.dn-content-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+.dn-avatar { width:28px; height:28px; border-radius:8px; background:var(--grad); color:#fff; display:grid; place-items:center; font-size:.74rem; font-weight:800; flex-shrink:0; }
+.dn-detay { font-size:.78rem; color:var(--muted); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px; }
+</style>
+{% endblock %}

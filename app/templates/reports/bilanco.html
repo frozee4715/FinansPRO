@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% set active = 'reports' %}
+{% block title %}Bilanço{% endblock %}
+{% block heading %}Bilanço{% endblock %}
+{% block crumb %}Varlıklar · Borçlar · Öz Kaynak{% endblock %}
+
+{% block content %}
+
+{% set oran = ((bs.oz_kaynak / bs.toplam_varlik * 100) if bs.toplam_varlik > 0 else 0)|int %}
+
+<!-- KPI Şeridi -->
+<div class="bl-kpi-row">
+    <div class="bl-kpi {{ 'bl-kpi-green' if bs.oz_kaynak >= 0 else 'bl-kpi-red' }}">
+        <div class="bl-kpi-ico">🏦</div>
+        <div class="bl-kpi-body">
+            <div class="bl-kpi-lbl">Toplam Varlık</div>
+            <div class="bl-kpi-val">{{ "%.0f"|format(bs.toplam_varlik) }} {{ CURRENCY }}</div>
+        </div>
+    </div>
+    <div class="bl-kpi bl-kpi-red">
+        <div class="bl-kpi-ico">📋</div>
+        <div class="bl-kpi-body">
+            <div class="bl-kpi-lbl">Toplam Borç</div>
+            <div class="bl-kpi-val" style="color:var(--danger);">{{ "%.0f"|format(bs.borclar) }} {{ CURRENCY }}</div>
+        </div>
+    </div>
+    <div class="bl-kpi {{ 'bl-kpi-green' if bs.oz_kaynak >= 0 else 'bl-kpi-red' }}">
+        <div class="bl-kpi-ico">💎</div>
+        <div class="bl-kpi-body">
+            <div class="bl-kpi-lbl">Öz Kaynak</div>
+            <div class="bl-kpi-val" style="color:{{ 'var(--success)' if bs.oz_kaynak >= 0 else 'var(--danger)' }};">
+                {{ "%.0f"|format(bs.oz_kaynak) }} {{ CURRENCY }}
+            </div>
+        </div>
+    </div>
+    <div class="bl-kpi">
+        <div class="bl-kpi-ico">📊</div>
+        <div class="bl-kpi-body">
+            <div class="bl-kpi-lbl">Öz Kaynak Oranı</div>
+            <div class="bl-kpi-val" style="color:{{ 'var(--success)' if oran >= 50 else 'var(--warning)' }};">
+                %{{ oran }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ana Grid -->
+<div class="bl-main-grid">
+
+    <!-- Sol: Varlıklar + Borçlar -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <div class="card">
+            <div class="card-head"><h3>Varlıklar</h3><span class="badge badge-green">Aktif</span></div>
+            <div class="card-pad">
+                {% set varliklar = [
+                    ('🏦', 'Kasa & Banka', 'Aktif hesap bakiyeleri', bs.kasa_banka, 'var(--primary)'),
+                    ('🤝', 'Ticari Alacaklar', 'Tahsil edilmemiş faturalar', bs.alacaklar, '#6366f1'),
+                    ('📦', 'Stok Değeri', 'Ürünler × birim fiyat', bs.stok, '#f59e0b'),
+                ] %}
+                {% set max_v = [bs.kasa_banka, bs.alacaklar, bs.stok]|max %}
+                {% for ico, ad, aciklama, tutar, renk in varliklar %}
+                <div class="bl-row">
+                    <div class="bl-row-ico" style="background:{{ renk }}18; color:{{ renk }};">{{ ico }}</div>
+                    <div class="bl-row-info">
+                        <div class="bl-row-ad">{{ ad }}</div>
+                        <div class="bl-row-bar-wrap">
+                            <div class="bl-row-bar" style="width:{{ [(tutar/max_v*100)|int if max_v > 0 else 0, 100]|min }}%; background:{{ renk }};"></div>
+                        </div>
+                        <div class="bl-row-ac">{{ aciklama }}</div>
+                    </div>
+                    <div class="bl-row-val">{{ "%.0f"|format(tutar) }} {{ CURRENCY }}</div>
+                </div>
+                {% endfor %}
+                <div class="bl-total">
+                    <span>Toplam Varlık</span>
+                    <span style="color:var(--primary);">{{ "%.2f"|format(bs.toplam_varlik) }} {{ CURRENCY }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Borç & Öz Kaynak</h3><span class="badge badge-red">Pasif</span></div>
+            <div class="card-pad">
+                <div class="bl-row">
+                    <div class="bl-row-ico" style="background:#ef444418; color:#ef4444;">🧾</div>
+                    <div class="bl-row-info">
+                        <div class="bl-row-ad">Ticari Borçlar</div>
+                        <div class="bl-row-bar-wrap">
+                            <div class="bl-row-bar" style="width:{{ [(bs.borclar/bs.toplam_varlik*100)|int if bs.toplam_varlik > 0 else 0, 100]|min }}%; background:#ef4444;"></div>
+                        </div>
+                        <div class="bl-row-ac">Alış faturaları toplamı</div>
+                    </div>
+                    <div class="bl-row-val" style="color:var(--danger);">{{ "%.0f"|format(bs.borclar) }} {{ CURRENCY }}</div>
+                </div>
+                <div class="bl-row">
+                    <div class="bl-row-ico" style="background:{{ 'var(--success)' if bs.oz_kaynak >= 0 else 'var(--danger)' }}18; color:{{ 'var(--success)' if bs.oz_kaynak >= 0 else 'var(--danger)' }};">💎</div>
+                    <div class="bl-row-info">
+                        <div class="bl-row-ad">Öz Kaynak</div>
+                        <div class="bl-row-bar-wrap">
+                            <div class="bl-row-bar" style="width:{{ [oran, 100]|min }}%; background:var(--success);"></div>
+                        </div>
+                        <div class="bl-row-ac">Varlık − Borç</div>
+                    </div>
+                    <div class="bl-row-val" style="color:{{ 'var(--success)' if bs.oz_kaynak >= 0 else 'var(--danger)' }};">{{ "%.0f"|format(bs.oz_kaynak) }} {{ CURRENCY }}</div>
+                </div>
+                <div class="bl-total">
+                    <span>Toplam Pasif</span>
+                    <span style="color:var(--primary);">{{ "%.2f"|format(bs.toplam_varlik) }} {{ CURRENCY }}</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Sağ: Grafik + Sağlık -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <div class="card">
+            <div class="card-head"><h3>Varlık Dağılımı</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+                <canvas id="blChart" width="220" height="220" style="max-width:220px;"></canvas>
+                <div style="width:100%; display:flex; flex-direction:column; gap:8px;">
+                    {% for ico, lbl, val, renk in [
+                        ('🏦', 'Kasa & Banka', bs.kasa_banka, '#6366f1'),
+                        ('🤝', 'Alacaklar', bs.alacaklar, '#10b981'),
+                        ('📦', 'Stok', bs.stok, '#f59e0b'),
+                        ('🧾', 'Borçlar', bs.borclar, '#ef4444'),
+                    ] %}
+                    <div style="display:flex; align-items:center; gap:8px; font-size:.83rem;">
+                        <span style="width:10px;height:10px;border-radius:50%;background:{{ renk }};flex-shrink:0;"></span>
+                        <span style="flex:1;">{{ lbl }}</span>
+                        <span style="font-weight:600;">{{ "%.0f"|format(val) }} {{ CURRENCY }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Mali Sağlık</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:14px;">
+                {% set likidite = (bs.kasa_banka / bs.borclar) if bs.borclar > 0 else 999 %}
+                <div class="bl-health-item">
+                    <div class="bl-health-top">
+                        <span>Likidite Oranı</span>
+                        <span style="font-weight:700; color:{{ 'var(--success)' if likidite >= 1 else 'var(--danger)' }};">
+                            {{ "%.2f"|format(likidite) }}
+                        </span>
+                    </div>
+                    <div class="bl-health-bar-wrap">
+                        <div class="bl-health-bar" style="width:{{ [likidite * 50, 100]|min }}%; background:{{ 'var(--success)' if likidite >= 1 else 'var(--danger)' }};"></div>
+                    </div>
+                    <div class="muted" style="font-size:.75rem;">Kasa ÷ Borç · ideal ≥ 1.0</div>
+                </div>
+                <div class="bl-health-item">
+                    <div class="bl-health-top">
+                        <span>Öz Kaynak Oranı</span>
+                        <span style="font-weight:700; color:{{ 'var(--success)' if oran >= 50 else 'var(--warning)' }};">%{{ oran }}</span>
+                    </div>
+                    <div class="bl-health-bar-wrap">
+                        <div class="bl-health-bar" style="width:{{ oran }}%; background:{{ 'var(--success)' if oran >= 50 else 'var(--warning)' }};"></div>
+                    </div>
+                    <div class="muted" style="font-size:.75rem;">Öz Kaynak ÷ Toplam Varlık · ideal ≥ %50</div>
+                </div>
+                <div class="bl-health-item">
+                    <div class="bl-health-top">
+                        <span>Alacak Tahsilat Oranı</span>
+                        {% set tahsilat_oran = ((1 - bs.alacaklar / bs.toplam_varlik) * 100)|int if bs.toplam_varlik > 0 else 100 %}
+                        <span style="font-weight:700;">%{{ [tahsilat_oran, 100]|min }}</span>
+                    </div>
+                    <div class="bl-health-bar-wrap">
+                        <div class="bl-health-bar" style="width:{{ [tahsilat_oran, 100]|min }}%; background:var(--primary);"></div>
+                    </div>
+                    <div class="muted" style="font-size:.75rem;">Tahsil edilen alacak yüzdesi</div>
+                </div>
+            </div>
+        </div>
+
+        <a href="{{ url_for('exports.muhasebe_csv') }}" class="btn btn-ghost" style="text-align:center;">⬇️ Muhasebe CSV İndir</a>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+new Chart(document.getElementById('blChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Kasa & Banka', 'Alacaklar', 'Stok', 'Borçlar'],
+        datasets:[{ data:[{{ bs.kasa_banka }},{{ bs.alacaklar }},{{ bs.stok }},{{ bs.borclar }}],
+            backgroundColor:['#6366f1','#10b981','#f59e0b','#ef4444'],
+            borderWidth:2, borderColor:'transparent', hoverOffset:6 }]
+    },
+    options:{ cutout:'68%', plugins:{ legend:{ display:false } } }
+});
+</script>
+<style>
+.bl-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+@media(max-width:900px){ .bl-kpi-row{ grid-template-columns:repeat(2,1fr); } }
+.bl-kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; display:flex; align-items:center; gap:14px; }
+.bl-kpi-ico { font-size:1.6rem; width:48px; height:48px; display:grid; place-items:center; background:var(--primary)10; border-radius:var(--radius-sm); }
+.bl-kpi-lbl { font-size:.75rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+.bl-kpi-val { font-size:1.15rem; font-weight:800; margin-top:2px; }
+
+.bl-main-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:16px; }
+@media(max-width:900px){ .bl-main-grid{ grid-template-columns:1fr; } }
+
+.bl-row { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); }
+.bl-row:last-of-type { border-bottom:none; }
+.bl-row-ico { width:38px; height:38px; border-radius:10px; display:grid; place-items:center; font-size:1.1rem; flex-shrink:0; }
+.bl-row-info { flex:1; min-width:0; }
+.bl-row-ad { font-weight:600; font-size:.88rem; }
+.bl-row-bar-wrap { height:4px; background:var(--border); border-radius:999px; margin:4px 0; }
+.bl-row-bar { height:100%; border-radius:999px; transition:width .6s; }
+.bl-row-ac { font-size:.74rem; color:var(--muted); }
+.bl-row-val { font-weight:700; font-size:.95rem; white-space:nowrap; }
+.bl-total { display:flex; justify-content:space-between; padding:14px 0 0; margin-top:8px; border-top:2px solid var(--primary); font-weight:800; }
+
+.bl-health-item { display:flex; flex-direction:column; gap:4px; }
+.bl-health-top { display:flex; justify-content:space-between; font-size:.85rem; }
+.bl-health-bar-wrap { height:6px; background:var(--border); border-radius:999px; }
+.bl-health-bar { height:100%; border-radius:999px; transition:width .6s; }
+</style>
+{% endblock %}

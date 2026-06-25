@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% set active = 'accounts' %}
+{% block title %}{{ hesap.ad }} — Hareketler{% endblock %}
+{% block heading %}{{ hesap.ad }}{% endblock %}
+{% block crumb %}
+    <a href="{{ url_for('accounts.list') }}">Hesaplar</a> / {{ hesap.ad }}
+{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('accounts.edit', aid=hesap.id) }}" class="btn btn-ghost btn-sm">✏️ Düzenle</a>
+{% endblock %}
+
+{% block content %}
+<div style="display:grid; grid-template-columns:1fr 360px; gap:24px; align-items:start;">
+
+    <!-- Sol: hareket tablosu -->
+    <div>
+        <div class="card">
+            <div class="card-head">
+                <h3>Hareketler
+                    <span class="muted" style="font-weight:500;">({{ hareketler|length }})</span>
+                </h3>
+            </div>
+            {% if hareketler %}
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Açıklama</th>
+                            <th>Tip</th>
+                            <th>Referans</th>
+                            <th class="right">Tutar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in hareketler %}
+                        <tr>
+                            <td class="muted">{{ h.tarih or '—' }}</td>
+                            <td>{{ h.aciklama or '—' }}</td>
+                            <td>
+                                {% if h.tip == 'Giriş' %}
+                                    <span class="badge badge-green">⬆ Giriş</span>
+                                {% elif h.tip == 'Çıkış' %}
+                                    <span class="badge badge-red">⬇ Çıkış</span>
+                                {% else %}
+                                    <span class="badge badge-blue">↔ Virman</span>
+                                {% endif %}
+                            </td>
+                            <td class="muted">{{ h.referans or '—' }}</td>
+                            <td class="right" style="font-weight:600;
+                                color: {{ 'var(--green)' if (h.tutar or 0) > 0 else 'var(--red)' }};">
+                                {{ "%.2f"|format(h.tutar or 0) }} {{ hesap.para_birimi or '₺' }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty">
+                <div class="big">📋</div>
+                <p>Bu hesapta henüz hareket yok.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Sağ: bakiye özeti + yeni hareket formu -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <!-- Bakiye göstergesi -->
+        <div class="card">
+            <div class="card-pad">
+                <div style="text-align:center; padding:8px 0;">
+                    <div class="muted" style="font-size:0.85rem; margin-bottom:4px;">Anlık Bakiye</div>
+                    <div style="font-size:2rem; font-weight:800;
+                         color: {{ 'var(--green)' if bakiye >= 0 else 'var(--red)' }};">
+                        {{ "%.2f"|format(bakiye) }} {{ hesap.para_birimi or '₺' }}
+                    </div>
+                    <div style="margin-top:10px;">
+                        <span class="badge badge-blue">{{ hesap.tur }}</span>
+                    </div>
+                    {% if hesap.aciklama %}
+                    <div class="muted" style="font-size:0.82rem; margin-top:8px;">{{ hesap.aciklama }}</div>
+                    {% endif %}
+                    <div class="muted" style="font-size:0.78rem; margin-top:6px;">
+                        Başlangıç bakiyesi: {{ "%.2f"|format(hesap.bakiye_baslangic or 0) }} {{ hesap.para_birimi or '₺' }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Yeni hareket formu -->
+        <div class="card">
+            <div class="card-head">
+                <h3>➕ Yeni Hareket</h3>
+            </div>
+            <div class="card-pad">
+                <form method="post" action="{{ url_for('accounts.add_movement', aid=hesap.id) }}">
+                    <div class="field">
+                        <label>Tarih *</label>
+                        <input class="input" type="date" name="tarih" required
+                               value="{{ today }}">
+                    </div>
+                    <div class="field">
+                        <label>Hareket Tipi *</label>
+                        <select class="input" name="tip" required>
+                            <option value="">Seçiniz</option>
+                            {% for t in hareket_tipleri %}
+                            <option value="{{ t }}">{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Tutar ({{ hesap.para_birimi or '₺' }}) *</label>
+                        <input class="input" type="number" step="0.01" min="0.01"
+                               name="tutar" required placeholder="0.00">
+                    </div>
+                    <div class="field">
+                        <label>Açıklama</label>
+                        <input class="input" type="text" name="aciklama" maxlength="120"
+                               placeholder="Kısa açıklama (opsiyonel)">
+                    </div>
+                    <div class="field">
+                        <label>Referans</label>
+                        <input class="input" type="text" name="referans" maxlength="80"
+                               placeholder="Belge no, fatura no vb.">
+                    </div>
+                    <button class="btn btn-primary" type="submit" style="width:100%;">
+                        💰 Hareketi Kaydet
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tarih alanını bugüne ayarla
+    var tarihInput = document.querySelector('input[name="tarih"]');
+    if (tarihInput && !tarihInput.value) {
+        tarihInput.value = new Date().toISOString().split('T')[0];
+    }
+</script>
+{% endblock %}

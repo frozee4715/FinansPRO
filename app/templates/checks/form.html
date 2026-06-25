@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% set active = 'checks' %}
+{% block title %}{{ 'Kayıt Düzenle' if mode=='edit' else 'Yeni Çek / Senet' }}{% endblock %}
+{% block heading %}{{ 'Kayıt Düzenle' if mode=='edit' else 'Yeni Çek / Senet' }}{% endblock %}
+{% block crumb %}<a href="{{ url_for('checks.list') }}">Çek / Senet</a> / {{ 'Düzenle' if mode=='edit' else 'Yeni' }}{% endblock %}
+
+{% block content %}
+<div class="pay-form-grid">
+
+    <!-- Sol: Form -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+        <form method="post" action="{{ url_for('checks.edit', cid=cid) if mode=='edit' else url_for('checks.create') }}">
+
+            <div class="card">
+                <div class="card-head">
+                    <h3>{{ 'Kaydı Güncelle' if mode=='edit' else 'Yeni Çek / Senet Ekle' }}</h3>
+                </div>
+                <div class="card-pad" style="display:flex; flex-direction:column; gap:16px;">
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Tür *</label>
+                            <select class="input" name="tur" required>
+                                <option value="">— Seçiniz —</option>
+                                {% for t in TURLER %}
+                                <option value="{{ t }}" {{ 'selected' if c and c.tur==t }}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Durum *</label>
+                            <select class="input" name="durum" required>
+                                {% for d in DURUMLAR %}
+                                <option value="{{ d }}" {{ 'selected' if c and c.durum==d }}>{{ d }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Taraf (Kimden / Kime) *</label>
+                        <input class="input" type="text" name="taraf" maxlength="120" required
+                               value="{{ c.taraf if c else '' }}" placeholder="Örn: ABC Ltd. Şti. veya Müşteri Adı">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Tutar ({{ CURRENCY }}) *</label>
+                            <input class="input" type="number" name="tutar" step="0.01" min="0.01" required
+                                   id="tutarInp"
+                                   value="{{ c.tutar if c else '' }}" placeholder="0.00">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Vade Tarihi *</label>
+                            <input class="input" type="date" name="vade_tarihi" required
+                                   value="{{ c.vade_tarihi if c else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Notlar</label>
+                        <textarea class="input" name="notlar" rows="3"
+                                  placeholder="Banka, seri no, açıklama vb." style="resize:vertical;">{{ c.notlar if c else '' }}</textarea>
+                    </div>
+
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" type="submit" style="flex:1;">
+                    {{ '💾 Güncelle' if mode=='edit' else '🧾 Kaydı Oluştur' }}
+                </button>
+                <a href="{{ url_for('checks.list') }}" class="btn btn-ghost">İptal</a>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Sağ: Bilgi paneli -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <!-- Tutar önizleme -->
+        <div class="card">
+            <div class="card-head"><h3>Kayıt Özeti</h3></div>
+            <div class="card-pad" style="text-align:center; padding:20px 0 14px;">
+                <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">Tutar</div>
+                <div id="tutarGoster" style="font-size:2rem; font-weight:800; color:var(--primary);">0.00 {{ CURRENCY }}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="form-aside-hero">
+                <span class="fa-ico">🧾</span>
+                <h4>Çek & Senet Takibi</h4>
+                <p>Vadeli çek ve senetlerinizi kaydedin; vade yaklaşınca otomatik uyarı alın.</p>
+            </div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px; padding-top:14px;">
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">📥</span><span>Müşteriden aldığınız çekler "Alınan Çek", tedarikçiye verdiğiniz çekler "Verilen Çek".</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">📅</span><span>Vadeye 7 gün kala gösterge panelinde uyarı çıkar; takibi kaçırmazsınız.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">✅</span><span>Çek/senet tahsil edildiğinde listede "Tahsil Edildi" olarak işaretleyin.</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Durum Rehberi</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:8px;">
+                {% for ico, lbl, aciklama in [('⏳','Beklemede','Vade gelmedi'),('✅','Tahsil Edildi','Ödeme alındı'),('❌','Karşılıksız','Ödeme gerçekleşmedi'),('🔄','Ciro Edildi','Başkasına devredildi')] %}
+                <div style="display:flex; align-items:center; gap:8px; font-size:.82rem;">
+                    <span style="font-size:.9rem; width:18px;">{{ ico }}</span>
+                    <span style="font-weight:600; width:90px; color:var(--text);">{{ lbl }}</span>
+                    <span class="muted">{{ aciklama }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var tInp = document.getElementById('tutarInp');
+var tGos = document.getElementById('tutarGoster');
+function updateTutar() {
+    var v = parseFloat(tInp ? tInp.value : 0) || 0;
+    tGos.textContent = v.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' {{ CURRENCY }}';
+}
+if (tInp) { tInp.addEventListener('input', updateTutar); updateTutar(); }
+</script>
+{% endblock %}

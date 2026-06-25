@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% set active = 'accounts' %}
+{% block title %}{{ 'Hesap Düzenle' if mode=='edit' else 'Yeni Hesap' }}{% endblock %}
+{% block heading %}{{ 'Hesap Düzenle' if mode=='edit' else 'Yeni Hesap' }}{% endblock %}
+{% block crumb %}<a href="{{ url_for('accounts.list') }}">Hesaplar</a> / {{ 'Düzenle' if mode=='edit' else 'Yeni' }}{% endblock %}
+
+{% block content %}
+<div class="pay-form-grid">
+
+    <!-- Sol: Form -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+        <form method="post" action="{{ url_for('accounts.edit', aid=aid) if mode=='edit' else url_for('accounts.create') }}">
+
+            <div class="card">
+                <div class="card-head">
+                    <h3>{{ 'Hesabı Güncelle' if mode=='edit' else 'Yeni Hesap Ekle' }}</h3>
+                </div>
+                <div class="card-pad" style="display:flex; flex-direction:column; gap:16px;">
+
+                    <div style="display:grid; grid-template-columns:1.6fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Hesap Adı *</label>
+                            <input class="input" type="text" name="ad" required maxlength="80"
+                                   value="{{ hesap.ad if hesap else '' }}" placeholder="Örn: Ana Kasa, Garanti Bankası...">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Hesap Türü *</label>
+                            <select class="input" name="tur" required>
+                                <option value="">Seçiniz</option>
+                                {% for t in hesap_turleri %}
+                                <option value="{{ t }}" {{ 'selected' if hesap and hesap.tur == t }}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr {% if mode != 'edit' %}1fr{% endif %}; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Para Birimi</label>
+                            <select class="input" name="para_birimi" {{ 'disabled' if mode=='edit' }}>
+                                {% for pb in para_birimleri %}
+                                <option value="{{ pb }}" {{ 'selected' if hesap and hesap.para_birimi == pb }}>{{ pb }}</option>
+                                {% endfor %}
+                            </select>
+                            {% if mode == 'edit' %}
+                            <small class="muted" style="font-size:.77rem;">Para birimi oluşturulduktan sonra değiştirilemez.</small>
+                            {% endif %}
+                        </div>
+                        {% if mode != 'edit' %}
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Başlangıç Bakiyesi</label>
+                            <input class="input" type="number" step="0.01" name="bakiye_baslangic"
+                                   value="{{ hesap.bakiye_baslangic if hesap else '0' }}" placeholder="0.00">
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Açıklama</label>
+                        <input class="input" type="text" name="aciklama" maxlength="200"
+                               value="{{ hesap.aciklama if hesap else '' }}" placeholder="Opsiyonel açıklama">
+                    </div>
+
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" type="submit" style="flex:1;">
+                    {{ '💾 Güncelle' if mode=='edit' else '🏦 Hesabı Oluştur' }}
+                </button>
+                <a href="{{ url_for('accounts.list') }}" class="btn btn-ghost">İptal</a>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Sağ: Bilgi paneli -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <div class="card">
+            <div class="form-aside-hero">
+                <span class="fa-ico">🏦</span>
+                <h4>Kasa & Banka Hesabı</h4>
+                <p>Nakit, banka ve döviz hesaplarınızı tek yerden izleyin.</p>
+            </div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px; padding-top:14px;">
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">💼</span><span>Kasa, Banka, Döviz veya Kredi Kartı türünde hesap oluşturabilirsiniz.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">💰</span><span>Başlangıç bakiyesi: sisteme eklenirken mevcut tutarı girin. Sonrakiler bu bakiye üzerine eklenir.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">📊</span><span>Hesap detayından gelir/gider hareketleri ekleyerek anlık bakiyeyi takip edin.</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Hesap Türleri</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:8px;">
+                {% for ico, tur, aciklama in [('💵','Kasa','Nakit para girişleri'),('🏦','Banka','Banka hesapları'),('💱','Döviz','USD, EUR vb.'),('💳','Kredi Kartı','Kredi kartı harcamaları')] %}
+                <div style="display:flex; align-items:center; gap:10px; font-size:.82rem; padding:4px 0;">
+                    <span style="font-size:1.1rem; width:22px;">{{ ico }}</span>
+                    <span style="font-weight:600; width:90px; color:var(--text);">{{ tur }}</span>
+                    <span class="muted">{{ aciklama }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

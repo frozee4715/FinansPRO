@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% set active = 'invoices' %}
+{% block title %}{{ 'Teklifler' if tip == 'teklif' else 'Faturalar' }}{% endblock %}
+{% block heading %}{{ 'Teklifler' if tip == 'teklif' else 'Faturalar' }}{% endblock %}
+{% block crumb %}{{ 'Teklif / Proforma yönetimi' if tip == 'teklif' else 'Alış / satış fatura yönetimi' }}{% endblock %}
+{% block actions %}
+    {% if tip == 'teklif' %}
+        <a href="{{ url_for('invoices.list') }}" class="btn btn-ghost btn-sm">Tüm Faturalar</a>
+        <a href="{{ url_for('invoices.teklif_create') }}" class="btn btn-primary btn-sm">＋ Yeni Teklif</a>
+    {% else %}
+        <a href="{{ url_for('invoices.list', tip='teklif') }}" class="btn btn-ghost btn-sm">📋 Teklifler</a>
+        <a href="{{ url_for('exports.invoices_csv') }}" class="btn btn-ghost btn-sm">⬇️ CSV</a>
+        <a href="{{ url_for('invoices.create') }}" class="btn btn-primary btn-sm">＋ Yeni Fatura</a>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-head">
+        <h3>
+            {{ 'Teklif Listesi' if tip == 'teklif' else 'Fatura Listesi' }}
+            <span class="muted" style="font-weight:500;">({{ faturalar|length }})</span>
+        </h3>
+        <form method="get" class="flex" style="gap:8px;">
+            {% if tip %}<input type="hidden" name="tip" value="{{ tip }}">{% endif %}
+            <input class="input btn-sm" style="width:240px;" type="text" name="q" value="{{ q }}"
+                   placeholder="🔍 {{ 'Teklif no / müşteri...' if tip == 'teklif' else 'Fatura no / müşteri...' }}">
+            <button class="btn btn-ghost btn-sm" type="submit">Ara</button>
+            {% if q %}<a href="{{ url_for('invoices.list', tip=tip or '') }}" class="btn btn-ghost btn-sm">✕</a>{% endif %}
+        </form>
+    </div>
+
+    {% if faturalar %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>{{ 'Teklif No' if tip == 'teklif' else 'Fatura No' }}</th>
+                    <th>Müşteri</th>
+                    <th>Tarih</th>
+                    {% if tip == 'teklif' %}<th>Geçerlilik</th>{% else %}<th>Tip</th>{% endif %}
+                    <th class="right">Toplam</th>
+                    <th class="right">Durum</th>
+                    <th class="right">İşlem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in faturalar %}
+                <tr>
+                    <td><strong>{{ f.fatura_no }}</strong></td>
+                    <td>{{ f.musteri_unvan or '—' }}</td>
+                    <td class="muted">{{ f.tarih or '—' }}</td>
+                    {% if tip == 'teklif' %}
+                    <td class="muted">{{ f.gecerlilik_tarihi or '—' }}</td>
+                    {% else %}
+                    <td>
+                        {% if f.fatura_tipi == 'Satış' %}<span class="badge badge-blue">Satış</span>
+                        {% elif f.fatura_tipi == 'Teklif' %}<span class="badge badge-amber">Teklif</span>
+                        {% else %}<span class="badge badge-amber">Alış</span>{% endif %}
+                    </td>
+                    {% endif %}
+                    <td class="right"><strong>{{ "%.2f"|format(f.toplam_tutar or 0) }} ₺</strong></td>
+                    <td class="right">
+                        {% if tip == 'teklif' %}
+                            <span class="badge badge-amber">Bekliyor</span>
+                        {% else %}
+                            {% set bakiye = (f.toplam_tutar or 0) - (f.odenen or 0) %}
+                            {% if bakiye <= 0.001 %}<span class="badge badge-green">Ödendi</span>
+                            {% elif (f.odenen or 0) > 0 %}<span class="badge badge-amber">Kısmi</span>
+                            {% else %}<span class="badge badge-red">Ödenmedi</span>{% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="right">
+                        <div class="flex" style="justify-content:flex-end; gap:6px;">
+                            <a href="{{ url_for('invoices.detail', iid=f.id) }}" class="btn btn-ghost btn-sm">Detay</a>
+                            {% if tip != 'teklif' %}
+                            <a href="{{ url_for('exports.invoice_print', iid=f.id) }}" class="btn btn-ghost btn-sm" title="Yazdır / PDF">🖨️</a>
+                            <form method="post" action="{{ url_for('invoices.send_email', iid=f.id) }}">
+                                <button class="btn btn-ghost btn-sm" type="submit" title="E-posta Gönder">✉️</button>
+                            </form>
+                            {% endif %}
+                            {% if tip == 'teklif' %}
+                            <form method="post"
+                                  action="{{ url_for('invoices.teklif_to_invoice', iid=f.id) }}"
+                                  data-confirm="'{{ f.fatura_no }}' teklifini faturaya dönüştürmek istediğinize emin misiniz?">
+                                <button class="btn btn-primary btn-sm" type="submit">Faturala</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{{ url_for('invoices.delete', iid=f.id) }}"
+                                  data-confirm=""{{ f.fatura_no }}" kaydını silmek istediğinize emin misiniz?">
+                                <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">{{ '📋' if tip == 'teklif' else '🧾' }}</div>
+        <p>
+            {% if q %}Aramanıza uygun kayıt bulunamadı.
+            {% elif tip == 'teklif' %}Henüz teklif oluşturulmamış.
+            {% else %}Henüz fatura oluşturulmamış.{% endif %}
+        </p>
+        {% if tip == 'teklif' %}
+        <a href="{{ url_for('invoices.teklif_create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">İlk teklifi oluştur</a>
+        {% else %}
+        <a href="{{ url_for('invoices.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">İlk faturayı oluştur</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

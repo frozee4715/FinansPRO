@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% set active = 'checks' %}
+{% block title %}Çek / Senet Takibi{% endblock %}
+{% block heading %}Çek / Senet Takibi{% endblock %}
+{% block crumb %}Vadeli ödeme araçları{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('checks.create') }}" class="btn btn-primary btn-sm">＋ Yeni Kayıt</a>
+{% endblock %}
+
+{% block content %}
+{# Özet stat kartları #}
+<div class="stat-grid" style="margin-bottom:20px;">
+    <div class="stat">
+        <div class="stat-val">{{ cekler|length }}</div>
+        <div class="stat-lbl">Toplam Kayıt</div>
+    </div>
+    <div class="stat">
+        <div class="stat-val">{{ cekler|selectattr('durum','equalto','Beklemede')|list|length }}</div>
+        <div class="stat-lbl">Beklemede</div>
+    </div>
+    <div class="stat">
+        <div class="stat-val">{{ "%.2f"|format(toplam) }} {{ CURRENCY }}</div>
+        <div class="stat-lbl">Toplam Tutar</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-head">
+        <h3>Kayıt Listesi</h3>
+        {# Filtre formu #}
+        <form method="get" class="flex" style="gap:8px; flex-wrap:wrap;">
+            <select class="input btn-sm" name="tur" style="width:120px;">
+                <option value="">Tüm Türler</option>
+                {% for t in TURLER %}
+                <option value="{{ t }}" {{ 'selected' if tur==t }}>{{ t }}</option>
+                {% endfor %}
+            </select>
+            <select class="input btn-sm" name="durum" style="width:160px;">
+                <option value="">Tüm Durumlar</option>
+                {% for d in DURUMLAR %}
+                <option value="{{ d }}" {{ 'selected' if durum==d }}>{{ d }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-ghost btn-sm" type="submit">Filtrele</button>
+            {% if tur or durum %}
+                <a href="{{ url_for('checks.list') }}" class="btn btn-ghost btn-sm">✕ Temizle</a>
+            {% endif %}
+        </form>
+    </div>
+
+    {% if cekler %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Tür</th>
+                    <th>Taraf</th>
+                    <th>Vade Tarihi</th>
+                    <th class="right">Tutar</th>
+                    <th>Durum</th>
+                    <th class="right">İşlem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in cekler %}
+                {% set gecmis = c.vade_tarihi and c.vade_tarihi < bugun and c.durum == 'Beklemede' %}
+                <tr{% if gecmis %} style="background:rgba(239,68,68,.05);"{% endif %}>
+                    <td class="muted">{{ c.id }}</td>
+                    <td>
+                        {% if c.tur == 'Çek' %}
+                            <span class="badge badge-blue">💳 Çek</span>
+                        {% else %}
+                            <span class="badge badge-yellow">📄 Senet</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong>{{ c.taraf }}</strong>
+                        {% if c.notlar %}
+                            <br><span class="muted" style="font-size:.82rem;">{{ c.notlar|truncate(50) }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if gecmis %}
+                            <span class="badge badge-red">⚠️ {{ c.vade_tarihi }}</span>
+                        {% else %}
+                            <span class="muted">{{ c.vade_tarihi or '—' }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="right"><strong>{{ "%.2f"|format(c.tutar or 0) }} {{ CURRENCY }}</strong></td>
+                    <td>
+                        {% if c.durum == 'Beklemede' %}
+                            <span class="badge badge-yellow">⏳ Beklemede</span>
+                        {% elif c.durum == 'Tahsil Edildi' %}
+                            <span class="badge badge-green">✅ Tahsil Edildi</span>
+                        {% elif c.durum == 'Ödendi' %}
+                            <span class="badge badge-blue">✔️ Ödendi</span>
+                        {% else %}
+                            <span class="badge">↩️ {{ c.durum }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="right">
+                        <div class="flex" style="justify-content:flex-end; gap:6px; flex-wrap:wrap;">
+                            {# Hızlı durum değiştirme #}
+                            {% if c.durum == 'Beklemede' %}
+                            <form method="post" action="{{ url_for('checks.set_status', cid=c.id) }}"
+                                  style="display:inline;">
+                                <input type="hidden" name="durum" value="{{ 'Tahsil Edildi' if c.tur=='Çek' else 'Ödendi' }}">
+                                <button class="btn btn-ghost btn-sm" type="submit"
+                                        title="{{ 'Tahsil Edildi' if c.tur=='Çek' else 'Ödendi' }} olarak işaretle">
+                                    ✔️
+                                </button>
+                            </form>
+                            {% endif %}
+                            <a href="{{ url_for('checks.edit', cid=c.id) }}" class="btn btn-ghost btn-sm">Düzenle</a>
+                            <form method="post" action="{{ url_for('checks.delete', cid=c.id) }}"
+                                  data-confirm="Bu kaydı silmek istediğinize emin misiniz?">
+                                <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">🧾</div>
+        <p>{{ 'Seçilen filtreye uygun kayıt bulunamadı.' if (tur or durum) else 'Henüz çek/senet kaydı eklenmemiş.' }}</p>
+        <a href="{{ url_for('checks.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">
+            İlk kaydı ekle
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

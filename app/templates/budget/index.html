@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% set active = 'budget' %}
+{% block title %}Bütçe Takibi{% endblock %}
+{% block heading %}Bütçe Takibi{% endblock %}
+{% block crumb %}{{ yil }} / {{ "%02d"|format(ay) }} dönemi bütçe özeti{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('budget.edit', yil=yil, ay=ay) }}" class="btn btn-primary btn-sm">✏️ Hedefleri Düzenle</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Yıl/ay seçici -->
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-pad" style="padding:14px 20px;">
+        <form method="get" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+            <div class="field" style="margin:0;">
+                <label style="font-size:0.8rem;">Yıl</label>
+                <select class="input btn-sm" name="yil" style="width:100px;">
+                    {% for y in yillar %}
+                    <option value="{{ y }}" {{ 'selected' if y == yil }}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field" style="margin:0;">
+                <label style="font-size:0.8rem;">Ay</label>
+                <select class="input btn-sm" name="ay" style="width:130px;">
+                    {% set ay_adlari = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
+                                        'Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'] %}
+                    {% for a in aylar %}
+                    <option value="{{ a }}" {{ 'selected' if a == ay }}>{{ ay_adlari[a-1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-ghost btn-sm" type="submit">Göster</button>
+        </form>
+    </div>
+</div>
+
+<!-- Özet stat kartları -->
+<div class="stat-grid" style="margin-bottom:24px;">
+    <div class="stat">
+        <div class="stat-ico">🎯</div>
+        <div class="stat-label">Toplam Bütçe Hedefi</div>
+        <div class="stat-value">{{ "%.2f"|format(toplam_hedef) }} {{ CURRENCY }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico">💸</div>
+        <div class="stat-label">Gerçekleşen Gider</div>
+        <div class="stat-value">{{ "%.2f"|format(toplam_gerceklesen) }} {{ CURRENCY }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico">📊</div>
+        <div class="stat-label">Bütçe Kullanım Oranı</div>
+        <div class="stat-value"
+             style="color: {% if toplam_oran < 80 %}var(--green){% elif toplam_oran <= 100 %}var(--amber, #f59e0b){% else %}var(--red){% endif %};">
+            %{{ toplam_oran }}
+        </div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico">💰</div>
+        <div class="stat-label">Kalan Bütçe</div>
+        <div class="stat-value"
+             style="color: {{ 'var(--green)' if toplam_hedef - toplam_gerceklesen >= 0 else 'var(--red)' }};">
+            {{ "%.2f"|format(toplam_hedef - toplam_gerceklesen) }} {{ CURRENCY }}
+        </div>
+    </div>
+</div>
+
+<!-- Kategori ilerleme çubukları -->
+<div class="card">
+    <div class="card-head">
+        <h3>Kategori Bazlı Bütçe Durumu</h3>
+    </div>
+    <div class="card-pad">
+        {% if kategoriler_veri %}
+        <div style="display:flex; flex-direction:column; gap:20px;">
+            {% for k in kategoriler_veri %}
+            <div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <div style="font-weight:600; font-size:0.95rem;">{{ k.kategori }}</div>
+                    <div style="font-size:0.85rem; display:flex; gap:12px; align-items:center;">
+                        <span class="muted">Hedef: <strong>{{ "%.2f"|format(k.hedef) }} {{ CURRENCY }}</strong></span>
+                        <span class="muted">Gerçekleşen: <strong>{{ "%.2f"|format(k.gerceklesen) }} {{ CURRENCY }}</strong></span>
+                        <span class="badge
+                            {% if k.renk == 'yesil' %}badge-green
+                            {% elif k.renk == 'sari' %}badge-amber
+                            {% else %}badge-red{% endif %}">
+                            %{{ k.oran }}
+                        </span>
+                    </div>
+                </div>
+                <!-- İlerleme çubuğu -->
+                <div style="background:var(--surface-2,#f1f5f9); border-radius:8px; height:14px; overflow:hidden; position:relative;">
+                    <div style="
+                        height:100%;
+                        width:{{ [k.oran, 100]|min }}%;
+                        border-radius:8px;
+                        transition:width 0.4s ease;
+                        background: {% if k.renk == 'yesil' %}
+                            linear-gradient(90deg,#22c55e,#16a34a)
+                        {% elif k.renk == 'sari' %}
+                            linear-gradient(90deg,#f59e0b,#d97706)
+                        {% else %}
+                            linear-gradient(90deg,#ef4444,#dc2626)
+                        {% endif %};
+                    "></div>
+                    {% if k.oran > 100 %}
+                    <div style="position:absolute;right:6px;top:0;height:100%;display:flex;align-items:center;
+                                font-size:0.7rem;font-weight:700;color:#fff;">
+                        +%{{ (k.oran - 100)|round(1) }} aşım
+                    </div>
+                    {% endif %}
+                </div>
+                {% if k.hedef == 0 and k.gerceklesen > 0 %}
+                <div class="muted" style="font-size:0.78rem; margin-top:4px;">
+                    ⚠️ Bu kategori için bütçe hedefi belirlenmemiş.
+                </div>
+                {% elif k.hedef == 0 %}
+                <div class="muted" style="font-size:0.78rem; margin-top:4px;">
+                    Bu kategori için henüz bütçe hedefi yok.
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">
+            <div class="big">🎯</div>
+            <p>Bu dönem için henüz bütçe hedefi belirlenmemiş.</p>
+            <a href="{{ url_for('budget.edit', yil=yil, ay=ay) }}" class="btn btn-primary btn-sm" style="margin-top:14px;">
+                Bütçe Hedeflerini Belirle
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

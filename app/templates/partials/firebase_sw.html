@@ -1,0 +1,34 @@
+// Firebase Messaging Service Worker
+// Bu dosya /bildirimler/firebase-messaging-sw.js adresinden sunulur.
+// FCM arka plan mesajlarını yakalar.
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+    apiKey:            "{{ FCM_API_KEY }}",
+    authDomain:        "{{ FCM_AUTH_DOMAIN }}",
+    projectId:         "{{ FCM_PROJECT_ID }}",
+    storageBucket:     "{{ FCM_STORAGE_BUCKET }}",
+    messagingSenderId: "{{ FCM_MESSAGING_SENDER_ID }}",
+    appId:             "{{ FCM_APP_ID }}"
+});
+
+const messaging = firebase.messaging();
+
+// Uygulama arka planda / kapalıyken gelen bildirimler
+messaging.onBackgroundMessage(function(payload) {
+    const n = payload.notification || {};
+    self.registration.showNotification(n.title || 'FinansPro', {
+        body:  n.body  || '',
+        icon:  '/static/img/logo-mark.svg',
+        badge: '/static/img/logo-mark.svg',
+        data:  { url: (payload.fcmOptions && payload.fcmOptions.link) || '/panel' }
+    });
+});
+
+// Bildirime tıklanınca ilgili sayfayı aç
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close();
+    const url = (event.notification.data && event.notification.data.url) || '/panel';
+    event.waitUntil(clients.openWindow(url));
+});

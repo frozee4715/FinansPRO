@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% set active = 'budget' %}
+{% block title %}Bütçe Hedeflerini Düzenle{% endblock %}
+{% block heading %}Bütçe Hedeflerini Düzenle{% endblock %}
+{% block crumb %}
+    <a href="{{ url_for('budget.index', yil=yil, ay=ay) }}">Bütçe Takibi</a> / Hedef Düzenle
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:640px;">
+    <div class="card-pad">
+        <form method="post" action="{{ url_for('budget.edit') }}">
+
+            <!-- Dönem seçimi -->
+            <div style="background:var(--surface-2,#f8fafc); border-radius:10px; padding:14px 16px; margin-bottom:20px;">
+                <div style="font-weight:600; font-size:0.9rem; margin-bottom:10px; color:var(--muted);">📅 Dönem Seçimi</div>
+                <div class="flex" style="gap:16px;">
+                    <div class="field" style="flex:1; margin:0;">
+                        <label>Yıl</label>
+                        <select class="input" name="yil">
+                            {% for y in yillar %}
+                            <option value="{{ y }}" {{ 'selected' if y == yil }}>{{ y }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field" style="flex:1; margin:0;">
+                        <label>Ay</label>
+                        <select class="input" name="ay">
+                            {% set ay_adlari = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
+                                                'Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'] %}
+                            {% for a in aylar %}
+                            <option value="{{ a }}" {{ 'selected' if a == ay }}>{{ ay_adlari[a-1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kategori hedefleri -->
+            <div style="font-weight:600; font-size:0.9rem; margin-bottom:12px; color:var(--muted);">
+                💰 Kategori Bazlı Hedef Tutarlar
+            </div>
+
+            {% set kat_ikonlar = {
+                'Personel': '👥',
+                'Kira': '🏢',
+                'Pazarlama': '📢',
+                'Teknoloji': '💻',
+                'Seyahat': '✈️',
+                'Diğer': '🗂️'
+            } %}
+
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                {% for k in kategoriler %}
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 14px;
+                            background:var(--surface-2,#f8fafc); border-radius:10px;">
+                    <span style="font-size:1.3rem; min-width:28px; text-align:center;">{{ kat_ikonlar.get(k, '📁') }}</span>
+                    <label style="font-weight:600; min-width:110px; font-size:0.9rem; margin:0;">{{ k }}</label>
+                    <div style="flex:1; position:relative;">
+                        <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%);
+                                     color:var(--muted); font-size:0.9rem; pointer-events:none;">{{ CURRENCY }}</span>
+                        <input class="input" type="number" step="0.01" min="0"
+                               name="hedef_{{ k }}"
+                               value="{{ hedefler.get(k, 0) }}"
+                               placeholder="0.00"
+                               style="padding-left:28px;">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="flex" style="gap:10px; margin-top:20px;">
+                <button class="btn btn-primary" type="submit">🎯 Hedefleri Kaydet</button>
+                <a href="{{ url_for('budget.index', yil=yil, ay=ay) }}" class="btn btn-ghost">İptal</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

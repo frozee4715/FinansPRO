@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+{% set active = 'backup' %}
+{% block title %}Yedekleme{% endblock %}
+{% block heading %}Otomatik Yedekleme{% endblock %}
+{% block crumb %}Verilerinizi güvenle saklayın ve geri yükleyin{% endblock %}
+{% block actions %}
+<form method="post" action="{{ url_for('backup.olustur') }}">
+    <button class="btn btn-primary" type="submit">☁️ Yeni Yedek Oluştur</button>
+</form>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stat kartları -->
+<div class="stat-grid" style="margin-bottom:24px;">
+    <div class="stat">
+        <div class="stat-ico ic-blue">📦</div>
+        <div class="stat-label">Toplam Yedek</div>
+        <div class="stat-value">{{ yedekler|length }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-green">✅</div>
+        <div class="stat-label">Son Yedek</div>
+        <div class="stat-value" style="font-size:1.05rem;">
+            {{ yedekler[0].tarih if yedekler else '—' }}
+        </div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-amber">💾</div>
+        <div class="stat-label">Toplam Boyut</div>
+        <div class="stat-value" style="font-size:1.3rem;">
+            {% set toplam = namespace(v=0) %}
+            {% for y in yedekler %}{% set toplam.v = toplam.v + y.boyut %}{% endfor %}
+            {{ "%.1f"|format(toplam.v) }} KB
+        </div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-purple">🔏</div>
+        <div class="stat-label">İmzalı Yedek</div>
+        <div class="stat-value">
+            {{ yedekler|selectattr('imzali')|list|length }}
+        </div>
+    </div>
+</div>
+
+<!-- Bilgi banner -->
+<div style="background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(236,72,153,.06));
+            border:1px solid rgba(124,58,237,.18); border-radius:var(--radius);
+            padding:16px 20px; display:flex; align-items:flex-start; gap:14px; margin-bottom:22px;">
+    <span style="font-size:1.4rem; flex-shrink:0;">🔏</span>
+    <div>
+        <div style="font-weight:700; font-size:.93rem;">İmzalı Yedekleme</div>
+        <div class="muted" style="font-size:.84rem; margin-top:3px; line-height:1.55;">
+            Oluşturulan her yedek dosyasına uygulama imzası eklenir
+            (SQLite başlığına gömülü <code style="font-size:.82em;">application_id</code> + meta tablo).
+            Geri yükleme sırasında imza doğrulanır — yanlış veya sahte dosya kabul edilmez.
+        </div>
+    </div>
+</div>
+
+<!-- Yedek listesi -->
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-head">
+        <h3>📂 Mevcut Yedekler</h3>
+        <span class="badge badge-blue">{{ yedekler|length }} dosya</span>
+    </div>
+    {% if yedekler %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Dosya</th>
+                    <th>Oluşturma</th>
+                    <th>Boyut</th>
+                    <th>İmza</th>
+                    <th class="right">İşlemler</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for y in yedekler %}
+                <tr>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="width:36px;height:36px;border-radius:11px;
+                                         background:var(--primary-100);color:var(--primary);
+                                         display:grid;place-items:center;font-size:1rem;flex-shrink:0;">💾</span>
+                            <div>
+                                <strong style="font-family:monospace;font-size:.88rem;">{{ y.ad }}</strong>
+                                {% if y.meta.get('not') %}
+                                <div class="muted" style="font-size:.76rem;">{{ y.meta.get('not') }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="muted" style="font-size:.86rem;">{{ y.tarih }}</div>
+                        {% if y.meta.get('olusturma') %}
+                        <div class="muted" style="font-size:.76rem;">{{ y.meta.get('olusturma')[:10] }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-gray">{{ y.boyut }} KB</span>
+                    </td>
+                    <td>
+                        {% if y.imzali %}
+                        <span style="display:inline-flex;align-items:center;gap:5px;
+                                     padding:4px 10px;border-radius:999px;font-size:.76rem;font-weight:700;
+                                     background:rgba(16,185,129,.12);color:#059669;">
+                            🔏 İmzalı
+                        </span>
+                        {% else %}
+                        <span style="display:inline-flex;align-items:center;gap:5px;
+                                     padding:4px 10px;border-radius:999px;font-size:.76rem;font-weight:700;
+                                     background:rgba(245,158,11,.12);color:#d97706;">
+                            ⚠️ İmzasız
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="right">
+                        <div style="display:flex;gap:7px;justify-content:flex-end;">
+                            <a href="{{ url_for('backup.indir', filename=y.ad) }}"
+                               class="btn btn-ghost btn-sm">⬇️ İndir</a>
+                            <form method="post" action="{{ url_for('backup.sil', filename=y.ad) }}"
+                                  data-confirm="'{{ y.ad }}' yedeğini silmek istediğinize emin misiniz?">
+                                <button class="btn btn-danger btn-sm" type="submit">🗑️</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">📭</div>
+        <p>Henüz yedek oluşturulmadı.</p>
+        <form method="post" action="{{ url_for('backup.olustur') }}" style="margin-top:16px;">
+            <button class="btn btn-primary" type="submit">☁️ İlk Yedeği Oluştur</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Geri Yükleme -->
+<div class="card">
+    <div class="card-head">
+        <h3>🔄 Yedekten Geri Yükle</h3>
+        <span class="badge badge-amber">⚠️ Dikkatli</span>
+    </div>
+    <div class="card-pad">
+
+        <!-- Uyarı kutusu -->
+        <div style="background:rgba(244,63,94,.07);border:1px solid rgba(244,63,94,.25);
+                    border-radius:var(--radius-sm);padding:14px 18px;
+                    display:flex;align-items:flex-start;gap:12px;margin-bottom:20px;">
+            <span style="font-size:1.2rem;flex-shrink:0;">⚠️</span>
+            <div>
+                <div style="font-weight:700;font-size:.9rem;color:var(--danger);margin-bottom:4px;">
+                    Mevcut veriler değiştirilecek
+                </div>
+                <div class="muted" style="font-size:.83rem;line-height:1.55;">
+                    Geri yükleme işlemi mevcut veritabanının üzerine yazar.
+                    Önce otomatik olarak bir yedek alınır ve "onceki_…db" adıyla kaydedilir.
+                    Yalnızca bu uygulamadan oluşturulan <strong>imzalı</strong> dosyalar kabul edilir.
+                </div>
+            </div>
+        </div>
+
+        <form method="post" action="{{ url_for('backup.geri_yukle') }}"
+              enctype="multipart/form-data"
+              onsubmit="return onayGeriYukle(event)">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+
+                <!-- Dosya seçici -->
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;
+                               border:2px dashed var(--border-strong);border-radius:var(--radius-sm);
+                               padding:14px 20px;flex:1;min-width:260px;
+                               transition:border-color .15s;background:var(--surface-2);"
+                       id="dropzone">
+                    <span style="font-size:1.4rem;">📁</span>
+                    <div>
+                        <div style="font-weight:700;font-size:.9rem;" id="dosyaAd">
+                            Yedek dosyasını seçin (.db)
+                        </div>
+                        <div class="muted" style="font-size:.78rem;margin-top:2px;">
+                            Bu uygulamanın oluşturduğu imzalı .db dosyası
+                        </div>
+                    </div>
+                    <input type="file" name="yedek_dosya" accept=".db"
+                           style="display:none;" id="dosyaInput"
+                           onchange="dosyaSec(this)">
+                </label>
+
+                <button type="submit" class="btn btn-danger" id="geriYukleBtn" disabled
+                        style="white-space:nowrap;">
+                    🔄 Geri Yükle
+                </button>
+            </div>
+
+            <!-- Seçili dosya önizleme -->
+            <div id="dosyaOnizleme" style="display:none; margin-top:14px;
+                 background:var(--surface-2);border:1px solid var(--border);
+                 border-radius:var(--radius-sm);padding:12px 16px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:1.2rem;">💾</span>
+                    <div>
+                        <div style="font-weight:700;font-size:.88rem;" id="prevAd"></div>
+                        <div class="muted" style="font-size:.78rem;" id="prevBoyut"></div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function dosyaSec(input) {
+    var btn = document.getElementById('geriYukleBtn');
+    var onizleme = document.getElementById('dosyaOnizleme');
+    var prevAd = document.getElementById('prevAd');
+    var prevBoyut = document.getElementById('prevBoyut');
+    var dosyaAd = document.getElementById('dosyaAd');
+
+    if (input.files && input.files[0]) {
+        var f = input.files[0];
+        var kb = (f.size / 1024).toFixed(1);
+        dosyaAd.textContent = f.name;
+        prevAd.textContent = f.name;
+        prevBoyut.textContent = kb + ' KB';
+        onizleme.style.display = 'block';
+        btn.disabled = false;
+        document.getElementById('dropzone').style.borderColor = 'var(--primary)';
+    } else {
+        dosyaAd.textContent = 'Yedek dosyasını seçin (.db)';
+        onizleme.style.display = 'none';
+        btn.disabled = true;
+        document.getElementById('dropzone').style.borderColor = '';
+    }
+}
+
+function onayGeriYukle(e) {
+    var dosya = document.getElementById('dosyaInput').files[0];
+    if (!dosya) { e.preventDefault(); return false; }
+    return confirm(
+        'DİKKAT: "' + dosya.name + '" dosyasından geri yüklenecek.\n' +
+        'Mevcut veriler değiştirilecek (önce otomatik yedeklenir).\n\n' +
+        'Devam etmek istiyor musunuz?'
+    );
+}
+</script>
+{% endblock %}

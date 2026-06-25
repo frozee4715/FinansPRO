@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% set active = 'destek' %}
+{% block title %}Öncelikli Destek{% endblock %}
+{% block heading %}Öncelikli Destek{% endblock %}
+{% block crumb %}Pro kullanıcılara özel hızlı destek hattı{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,rgba(124,58,237,.10),rgba(236,72,153,.08));
+            border:1px solid rgba(124,58,237,.18); border-radius:var(--radius-lg);
+            padding:28px 32px; margin-bottom:26px; display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+    <div style="width:60px;height:60px;border-radius:18px;background:var(--grad);
+                display:grid;place-items:center;font-size:1.7rem;flex-shrink:0;
+                box-shadow:0 8px 20px rgba(124,58,237,.3);">⚡</div>
+    <div>
+        <div style="font-weight:800; font-size:1.1rem; letter-spacing:-.01em;">Pro Öncelikli Destek</div>
+        <div class="muted" style="font-size:.88rem; margin-top:4px;">
+            Talepleriniz öncelikli işleme alınır. Ortalama yanıt süresi: <strong>2-4 saat</strong> (hafta içi 09:00–18:00).
+        </div>
+    </div>
+    <div style="margin-left:auto; text-align:right; flex-shrink:0;">
+        <div style="font-size:.78rem; color:var(--text-light); font-weight:700; text-transform:uppercase; letter-spacing:.05em;">Destek hattı</div>
+        <div style="font-weight:800; color:var(--primary);">destek@finanspro.com</div>
+    </div>
+</div>
+
+<div style="display:grid; grid-template-columns:1.1fr 1fr; gap:22px; align-items:start;">
+
+    <!-- Sol: Talep formu + SSS -->
+    <div style="display:flex; flex-direction:column; gap:22px;">
+
+        <!-- Yeni talep formu -->
+        <div class="card">
+            <div class="card-head"><h3>📩 Yeni Destek Talebi</h3></div>
+            <div class="card-pad">
+                <form method="post" action="{{ url_for('destek.index') }}">
+                    <div class="field">
+                        <label>Konu Kategorisi</label>
+                        <select class="input" name="konu">
+                            <option value="">Seçiniz…</option>
+                            {% for k in konular %}
+                            <option value="{{ k }}">{{ k }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field" style="margin-bottom:0;">
+                        <label>Mesajınız</label>
+                        <textarea class="input" name="mesaj" rows="5"
+                                  placeholder="Sorununuzu veya önerinizi detaylıca açıklayın…"
+                                  style="resize:vertical;"></textarea>
+                    </div>
+                    <div style="margin-top:14px;">
+                        <button class="btn btn-primary" type="submit">⚡ Talebi Gönder</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- SSS -->
+        <div class="card">
+            <div class="card-head"><h3>❓ Sık Sorulan Sorular</h3></div>
+            <div id="sssContainer">
+                {% for soru, cevap in sss %}
+                <div class="sss-item" style="border-bottom:1px solid var(--border);">
+                    <button type="button" class="sss-q"
+                            onclick="toggleSSS(this)"
+                            style="width:100%;text-align:left;padding:16px 22px;background:none;border:none;
+                                   cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+                                   font-weight:700;font-size:.93rem;color:var(--text);font-family:inherit;gap:12px;">
+                        <span>{{ soru }}</span>
+                        <span class="sss-chevron" style="flex-shrink:0;transition:transform .2s;font-size:1.1rem;color:var(--primary);">›</span>
+                    </button>
+                    <div class="sss-a" style="display:none; padding:0 22px 16px; color:var(--text-muted); font-size:.9rem; line-height:1.6;">
+                        {{ cevap }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sağ: Talep geçmişi -->
+    <div class="card" style="position:sticky; top:90px;">
+        <div class="card-head">
+            <h3>📋 Talep Geçmişi</h3>
+            <span class="badge badge-blue">{{ talepler|length }}</span>
+        </div>
+        {% if talepler %}
+        <div style="max-height:520px; overflow-y:auto;">
+            {% for t in talepler %}
+            <div style="padding:16px 20px; border-bottom:1px solid var(--border);
+                        {{ 'border-left:3px solid var(--success);' if t.durum=='kapali' else 'border-left:3px solid var(--primary);' }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+                    <span style="font-weight:700; font-size:.9rem;">{{ t.konu }}</span>
+                    {% if t.durum == 'kapali' %}
+                        <span class="badge badge-green">✓ Kapandı</span>
+                    {% else %}
+                        <span class="badge badge-blue">● Açık</span>
+                    {% endif %}
+                </div>
+                <div class="muted" style="font-size:.83rem; line-height:1.5;">
+                    {{ t.mesaj[:120] }}{% if t.mesaj|length > 120 %}…{% endif %}
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
+                    <span class="muted" style="font-size:.76rem;">
+                        {% if t.kullanici %}{{ t.kullanici }} · {% endif %}{{ t.olusturma[:16] }}
+                    </span>
+                    {% if current_user and current_user.rol == 'admin' and t.durum == 'acik' %}
+                    <form method="post" action="{{ url_for('destek.kapat', tid=t.id) }}" style="display:inline;">
+                        <button class="btn btn-ghost btn-sm" type="submit" style="padding:4px 10px; font-size:.76rem;">Kapat</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty" style="padding:40px 20px;">
+            <div class="big">📭</div>
+            <p>Henüz destek talebiniz yok.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSSS(btn) {
+    var answer = btn.nextElementSibling;
+    var chevron = btn.querySelector('.sss-chevron');
+    var open = answer.style.display !== 'none' && answer.style.display !== '';
+    // Tümünü kapat
+    document.querySelectorAll('.sss-a').forEach(function(a) { a.style.display = 'none'; });
+    document.querySelectorAll('.sss-chevron').forEach(function(c) { c.style.transform = ''; });
+    if (!open) {
+        answer.style.display = 'block';
+        chevron.style.transform = 'rotate(90deg)';
+    }
+}
+</script>
+{% endblock %}

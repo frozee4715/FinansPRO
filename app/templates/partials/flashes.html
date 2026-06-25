@@ -1,0 +1,13 @@
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flashes" id="flashes">
+    {% for category, msg in messages %}
+      {% set icon = {'success':'✅','danger':'⛔','warning':'⚠️','info':'ℹ️'}.get(category, 'ℹ️') %}
+      <div class="flash flash-{{ category }}">
+        <span>{{ icon }}</span>
+        <span>{{ msg }}</span>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}

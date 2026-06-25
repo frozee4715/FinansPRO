@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+{% set active = 'recurring' %}
+{% block title %}{{ 'Tanımı Düzenle' if kayit else 'Yeni Tekrarlayan Fatura' }}{% endblock %}
+{% block heading %}{{ 'Tekrarlayan Fatura Düzenle' if kayit else 'Yeni Tekrarlayan Fatura' }}{% endblock %}
+{% block crumb %}<a href="{{ url_for('recurring.list') }}">Tekrarlayan Faturalar</a> / {{ 'Düzenle' if kayit else 'Yeni' }}{% endblock %}
+
+{% block content %}
+<div class="pay-form-grid">
+
+    <!-- Sol: Form -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+        {% if kayit %}
+        <form method="post" action="{{ url_for('recurring.edit', rid=kayit.id) }}">
+        {% else %}
+        <form method="post" action="{{ url_for('recurring.create') }}">
+        {% endif %}
+
+            <div class="card">
+                <div class="card-head">
+                    <h3>{{ 'Tanımı Güncelle' if kayit else 'Yeni Tekrarlayan Fatura Tanımla' }}</h3>
+                </div>
+                <div class="card-pad" style="display:flex; flex-direction:column; gap:16px;">
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Müşteri *</label>
+                        <select class="input" name="musteri_id" required>
+                            <option value="">— Müşteri seçiniz —</option>
+                            {% for m in musteriler %}
+                            <option value="{{ m.id }}"
+                                {% if form and form.musteri_id == m.id|string %}selected
+                                {% elif kayit and kayit.musteri_id == m.id %}selected{% endif %}>
+                                {{ m.unvan }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Açıklama</label>
+                        <input class="input" type="text" name="aciklama"
+                               value="{{ form.aciklama if form else (kayit.aciklama if kayit else '') }}"
+                               placeholder="Aylık danışmanlık ücreti vb.">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Tutar ({{ CURRENCY }} KDV hariç) *</label>
+                            <input class="input" type="number" step="0.01" min="0.01" name="tutar" required
+                                   id="tutarInp"
+                                   value="{{ form.tutar if form else (kayit.tutar if kayit else '') }}"
+                                   placeholder="0.00">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">KDV (%)</label>
+                            <input class="input" type="number" step="0.01" min="0" name="kdv"
+                                   id="kdvInp"
+                                   value="{{ form.kdv if form else (kayit.kdv if kayit else '20') }}"
+                                   placeholder="20">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Periyot *</label>
+                            <select class="input" name="periyot" required>
+                                {% for p in periyotlar %}
+                                <option value="{{ p }}"
+                                    {% if form and form.periyot == p %}selected
+                                    {% elif not form and kayit and kayit.periyot == p %}selected
+                                    {% elif not form and not kayit and p == 'Aylık' %}selected{% endif %}>
+                                    {{ p }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Sonraki Fatura Tarihi *</label>
+                            <input class="input" type="date" name="sonraki_tarih" required
+                                   value="{{ form.sonraki_tarih if form else (kayit.sonraki_tarih if kayit else '') }}">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" type="submit" style="flex:1;">
+                    {{ '💾 Güncelle' if kayit else '🔄 Tanımı Kaydet' }}
+                </button>
+                <a href="{{ url_for('recurring.list') }}" class="btn btn-ghost">İptal</a>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Sağ: Bilgi paneli -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <!-- Hesaplama önizleme -->
+        <div class="card">
+            <div class="card-head"><h3>Fatura Tutarı</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px;">
+                <div style="text-align:center; padding:10px 0 6px;">
+                    <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">Toplam Tutar (KDV Dahil)</div>
+                    <div id="toplamGoster" style="font-size:1.8rem; font-weight:800; color:var(--primary);">0.00 {{ CURRENCY }}</div>
+                </div>
+                <div class="pay-ozet-row">
+                    <span class="pay-ozet-lbl">Matrah</span>
+                    <span class="pay-ozet-val" id="matrahGoster">0.00 {{ CURRENCY }}</span>
+                </div>
+                <div class="pay-ozet-row">
+                    <span class="pay-ozet-lbl">KDV</span>
+                    <span class="pay-ozet-val" id="kdvGoster">0.00 {{ CURRENCY }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="form-aside-hero">
+                <span class="fa-ico">🔄</span>
+                <h4>Otomatik Fatura</h4>
+                <p>Tek seferlik tanım yapın; sistem faturalarınızı otomatik oluştursun.</p>
+            </div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px; padding-top:14px;">
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">⏱️</span><span>Haftalık, Aylık veya Yıllık periyot seçenekleri mevcuttur.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">📅</span><span>İlk fatura tarihi olarak istediğiniz tarihi seçin; sonrakiler otomatik hesaplanır.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">▶️</span><span>Listede "Şimdi Oluştur" ile zamanlamayı beklemeden fatura üretebilirsiniz.</span></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var tInp = document.getElementById('tutarInp');
+var kInp = document.getElementById('kdvInp');
+function updateHesap() {
+    var tutar = parseFloat(tInp ? tInp.value : 0) || 0;
+    var kdvPct = parseFloat(kInp ? kInp.value : 0) || 0;
+    var kdvT = tutar * kdvPct / 100;
+    var toplam = tutar + kdvT;
+    document.getElementById('matrahGoster').textContent = tutar.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' {{ CURRENCY }}';
+    document.getElementById('kdvGoster').textContent = kdvT.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' {{ CURRENCY }}';
+    document.getElementById('toplamGoster').textContent = toplam.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' {{ CURRENCY }}';
+}
+if (tInp) tInp.addEventListener('input', updateHesap);
+if (kInp) kInp.addEventListener('input', updateHesap);
+updateHesap();
+</script>
+{% endblock %}

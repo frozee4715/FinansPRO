@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% set active = 'billing' %}
+{% block title %}Pro Sürüm{% endblock %}
+{% block heading %}FinansPro Pro{% endblock %}
+{% block crumb %}İşletmenizi bir üst seviyeye taşıyın{% endblock %}
+
+{% block content %}
+
+<!-- ── Hero ──────────────────────────────────────────────────────────── -->
+<div class="pro-hero" style="margin-bottom:0;">
+    <div class="pro-hero-inner" style="max-width:none; display:flex; align-items:center; justify-content:space-between; gap:32px; flex-wrap:wrap;">
+        <div>
+            <span class="pro-badge-lg">✨ PRO</span>
+            <h2 style="margin-top:14px;">Profesyonel muhasebenin<br>tüm gücü</h2>
+            <p style="max-width:460px; margin-top:10px;">Yapay zekâ asistanı, gelişmiş raporlar ve sınırsız dışa aktarma ile işletmenizi bir adım öne taşıyın.</p>
+        </div>
+        <div style="text-align:center;">
+            {% if plan == 'pro' %}
+            <div style="background:rgba(16,185,129,.2); border:1px solid rgba(16,185,129,.4); border-radius:18px; padding:20px 32px;">
+                <div style="font-size:2rem; margin-bottom:6px;">✅</div>
+                <div style="font-weight:800; font-size:1.05rem; color:#6ee7b7;">Pro Sürüm Aktif</div>
+                <div style="font-size:.85rem; color:rgba(255,255,255,.65); margin-top:4px;">Tüm özellikler açık</div>
+            </div>
+            {% else %}
+            <div style="background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); border-radius:18px; padding:20px 32px;">
+                <div style="font-size:2.8rem; font-weight:900; line-height:1; color:#fff;">₺199</div>
+                <div style="font-size:.85rem; color:rgba(255,255,255,.65); margin-top:4px;">/ay · KDV dahil</div>
+                {% if current_user and current_user.rol == 'admin' %}
+                <form method="post" action="{{ url_for('billing.activate') }}" style="margin-top:16px;">
+                    <button class="btn btn-primary" type="submit" style="background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.5);font-size:.95rem;padding:11px 26px;width:100%;">
+                        Hemen Yükselt →
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ── Fiyatlandırma ──────────────────────────────────────────────────── -->
+<div class="pricing-section">
+
+    <!-- Ücretsiz -->
+    <div class="pricing-card">
+        <div class="pricing-card-head">
+            <div class="pricing-tier">Başlangıç</div>
+            <div class="pricing-name">Ücretsiz</div>
+            <div class="pricing-price">
+                <span class="pricing-amount">₺0</span>
+                <span class="pricing-period">/ay</span>
+            </div>
+            <div class="pricing-desc">Küçük ölçekli işletmeler için temel muhasebe.</div>
+        </div>
+        <div class="pricing-card-body">
+            <ul class="pricing-features">
+                <li class="active"><span class="pf-check">✓</span> Fatura oluşturma & takip</li>
+                <li class="active"><span class="pf-check">✓</span> Müşteri & ürün yönetimi</li>
+                <li class="active"><span class="pf-check">✓</span> Ödeme takibi</li>
+                <li class="active"><span class="pf-check">✓</span> Temel gider kaydı</li>
+                <li><span class="pf-check disabled">✗</span> Yapay zekâ asistanı</li>
+                <li><span class="pf-check disabled">✗</span> Gelişmiş raporlar</li>
+                <li><span class="pf-check disabled">✗</span> CSV / PDF dışa aktarma</li>
+                <li><span class="pf-check disabled">✗</span> Öncelikli destek</li>
+            </ul>
+        </div>
+        <div class="pricing-card-foot">
+            <button class="btn btn-ghost btn-block" disabled style="opacity:.5; cursor:default;">Mevcut Plan</button>
+        </div>
+    </div>
+
+    <!-- Pro (öne çıkan) -->
+    <div class="pricing-card featured">
+        <div class="pricing-card-head">
+            <span class="pricing-badge-popular">⚡ En Popüler</span>
+            <div class="pricing-tier">Profesyonel</div>
+            <div class="pricing-name">Pro</div>
+            <div class="pricing-price">
+                <span class="pricing-amount">₺199</span>
+                <span class="pricing-period">/ay</span>
+            </div>
+            <div class="pricing-desc">Büyüyen işletmeler için tam donanımlı muhasebe çözümü.</div>
+        </div>
+        <div class="pricing-card-body">
+            <ul class="pricing-features" style="color:#fff;">
+                <li class="active" style="color:#fff;"><span class="pf-check">✓</span> Ücretsiz plandaki her şey</li>
+                <li class="active" style="color:#fff;"><span class="pf-check">✓</span> Yapay zekâ asistanı (AI)</li>
+                <li class="active" style="color:#fff;"><span class="pf-check">✓</span> Gelişmiş raporlar & analiz</li>
+                <li class="active" style="color:#fff;"><span class="pf-check">✓</span> Sınırsız CSV & PDF export</li>
+                <li class="active" style="color:#fff;"><span class="pf-check">✓</span> KDV beyan özeti</li>
+                <li class="active" style="color:#fff;"><span class="pf-check">✓</span> Alacak yaşlandırma raporu</li>
+                <li class="active" style="color:#fff;"><span class="pf-check">✓</span> Müşteri cari ekstresi</li>
+                <li class="active" style="color:#fff;"><span class="pf-check">✓</span> Öncelikli destek</li>
+            </ul>
+        </div>
+        <div class="pricing-card-foot" style="padding-top:8px;">
+            {% if plan == 'pro' %}
+            <div class="btn btn-ghost btn-block" style="justify-content:center; color:var(--success); border-color:var(--success); opacity:.85; cursor:default;">
+                ✓ Aktif Plan
+            </div>
+            {% elif current_user and current_user.rol == 'admin' %}
+            <form method="post" action="{{ url_for('billing.activate') }}">
+                <button class="btn btn-primary btn-block" type="submit" style="font-size:.97rem;">
+                    Hemen Başla →
+                </button>
+            </form>
+            <p style="text-align:center; font-size:.78rem; color:rgba(255,255,255,.5); margin-top:8px;">İptal istediğinizde yöneticinize bildirin.</p>
+            {% else %}
+            <p style="font-size:.85rem; color:rgba(255,255,255,.65); text-align:center;">Yükseltme için yöneticinizle görüşün.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Kurumsal -->
+    <div class="pricing-card">
+        <div class="pricing-card-head">
+            <div class="pricing-tier">Kurumsal</div>
+            <div class="pricing-name">Şirket</div>
+            <div class="pricing-price">
+                <span class="pricing-amount" style="font-size:1.9rem;">Özel</span>
+            </div>
+            <div class="pricing-desc">Çok kullanıcılı, özel entegrasyon ve SLA garantisi.</div>
+        </div>
+        <div class="pricing-card-body">
+            <ul class="pricing-features">
+                <li class="active"><span class="pf-check">✓</span> Pro plandaki her şey</li>
+                <li class="active"><span class="pf-check">✓</span> Sınırsız kullanıcı</li>
+                <li class="active"><span class="pf-check">✓</span> Özel e-fatura entegrasyonu</li>
+                <li class="active"><span class="pf-check">✓</span> ERP / muhasebe entegrasyonu</li>
+                <li class="active"><span class="pf-check">✓</span> Özel raporlama</li>
+                <li class="active"><span class="pf-check">✓</span> %99.9 SLA garantisi</li>
+                <li class="active"><span class="pf-check">✓</span> Yerinde kurulum desteği</li>
+                <li class="active"><span class="pf-check">✓</span> Özel müşteri temsilcisi</li>
+            </ul>
+        </div>
+        <div class="pricing-card-foot">
+            <a href="mailto:destek@finanspro.com" class="btn btn-ghost btn-block">Teklif Al</a>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Aktif Pro Özellikler ───────────────────────────────────────────── -->
+<div style="margin-top:36px;">
+    <div style="text-align:center; margin-bottom:6px;">
+        <span class="pro-badge-lg" style="background:var(--grad); border:none;">✨ PRO ÖZELLİKLERİ</span>
+    </div>
+    <h2 style="text-align:center; font-size:1.7rem; font-weight:800; letter-spacing:-.025em; margin-top:12px;">
+        Tek platformda her şey
+    </h2>
+    <p style="text-align:center; color:var(--text-muted); margin-top:8px; max-width:500px; margin-left:auto; margin-right:auto;">
+        Pro aboneleri için tüm özellikler aktif ve kullanıma hazır.
+    </p>
+
+    <div class="pro-features-grid">
+        {% for f in features %}
+        <div class="pro-feat-card">
+            <div class="pro-feat-card-active-dot">✓</div>
+            <div class="pro-feat-ico-wrap">{{ f.ico }}</div>
+            <h3>{{ f.ad }}</h3>
+            <p>{{ f.desc }}</p>
+
+            {% if plan == 'pro' %}
+                <div style="margin-top:14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <div class="pro-feat-status">● Aktif</div>
+                    {% if f.admin_only %}
+                        {% if current_user and current_user.rol == 'admin' %}
+                        <a href="{{ safe_url(f.url) }}" class="btn btn-ghost btn-sm" style="font-size:.78rem; padding:5px 12px;">
+                            Git →
+                        </a>
+                        {% else %}
+                        <span class="muted" style="font-size:.78rem;">Yönetici yapar</span>
+                        {% endif %}
+                    {% else %}
+                        <a href="{{ safe_url(f.url) }}" class="btn btn-ghost btn-sm" style="font-size:.78rem; padding:5px 12px;">
+                            Kullan →
+                        </a>
+                    {% endif %}
+                </div>
+            {% else %}
+            <div class="pro-feat-status" style="background:var(--border); color:var(--text-light); margin-top:14px;">Pro gerekir</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ── Yıllık tasarruf banner ─────────────────────────────────────────── -->
+<div style="margin-top:32px; background:var(--grad); border-radius:var(--radius-lg); padding:36px 44px; display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; color:#fff;">
+    <div>
+        <div style="font-size:1.35rem; font-weight:800; letter-spacing:-.02em;">Yıllık ödeyin, 2 ay kazanın</div>
+        <div style="color:rgba(255,255,255,.75); margin-top:6px;">₺1.990/yıl — aylık ödemeye kıyasla <strong style="color:#fff;">₺398 tasarruf</strong></div>
+    </div>
+    <div>
+        {% if plan == 'pro' %}
+        <span class="badge badge-green" style="font-size:.9rem; padding:10px 20px;">✓ Aktif Plan</span>
+        {% elif current_user and current_user.rol == 'admin' %}
+        <form method="post" action="{{ url_for('billing.activate') }}">
+            <button class="btn" type="submit" style="background:rgba(255,255,255,.18); border:1.5px solid rgba(255,255,255,.45); color:#fff; font-size:.95rem; padding:12px 28px;">
+                Yıllık Plana Geç →
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% set active = 'reports' %}
+{% block title %}Raporlar{% endblock %}
+{% block heading %}Raporlar & Analiz{% endblock %}
+{% block crumb %}Finansal durumunuzun özeti{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('exports.muhasebe_csv') }}" class="btn btn-ghost btn-sm">⬇️ Muhasebe CSV</a>
+    <a href="{{ url_for('exports.invoices_csv') }}" class="btn btn-ghost btn-sm">⬇️ Fatura CSV</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:22px;">
+    <div class="card-pad">
+        <form method="get" class="flex" style="gap:12px; flex-wrap:wrap; align-items:flex-end;">
+            <div class="field mb-0">
+                <label>Başlangıç</label>
+                <input class="input" type="date" name="start" value="{{ start }}">
+            </div>
+            <div class="field mb-0">
+                <label>Bitiş</label>
+                <input class="input" type="date" name="end" value="{{ end }}">
+            </div>
+            <button class="btn btn-primary" type="submit">Filtrele</button>
+            {% if start or end %}<a href="{{ url_for('reports.index') }}" class="btn btn-ghost">Temizle</a>{% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="stat-grid">
+    <div class="stat">
+        <div class="stat-ico ic-green">📈</div>
+        <div class="stat-label">Gelir (Satış)</div>
+        <div class="stat-value">{{ "%.0f"|format(ie.gelir) }} {{ CURRENCY }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-amber">📥</div>
+        <div class="stat-label">Alış</div>
+        <div class="stat-value">{{ "%.0f"|format(ie.alis) }} {{ CURRENCY }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-red">💸</div>
+        <div class="stat-label">Gider</div>
+        <div class="stat-value">{{ "%.0f"|format(ie.gider) }} {{ CURRENCY }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-blue">🧮</div>
+        <div class="stat-label">Tahmini Kâr</div>
+        <div class="stat-value" style="color:{{ 'var(--success)' if ie.kar >= 0 else 'var(--danger)' }};">
+            {{ "%.0f"|format(ie.kar) }} {{ CURRENCY }}
+        </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <div class="card-head"><h3>💰 Gelir / Gider Dağılımı</h3></div>
+        <div class="card-pad" style="display:flex; justify-content:center;">
+            <div style="width:100%; max-width:300px; height:300px;">
+                <canvas id="cIE"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>🧾 KDV Özeti</h3></div>
+        <div class="card-pad">
+            <div class="flex between" style="padding:9px 0; border-bottom:1px solid var(--border);">
+                <span class="muted">Hesaplanan KDV (Satış)</span><strong>{{ "%.2f"|format(kdv.hesaplanan) }} {{ CURRENCY }}</strong>
+            </div>
+            <div class="flex between" style="padding:9px 0; border-bottom:1px solid var(--border);">
+                <span class="muted">İndirilecek KDV (Alış)</span><strong>{{ "%.2f"|format(kdv.indirilecek) }} {{ CURRENCY }}</strong>
+            </div>
+            <div class="flex between" style="padding:13px 0;">
+                <strong>Ödenecek KDV</strong>
+                <strong style="font-size:1.2rem; color:{{ 'var(--danger)' if kdv.odenecek > 0 else 'var(--success)' }};">
+                    {{ "%.2f"|format(kdv.odenecek) }} {{ CURRENCY }}
+                </strong>
+            </div>
+            <p class="muted" style="font-size:.82rem;">Seçili tarih aralığı için tahmini KDV. Resmî beyan için mali müşavirinize danışın.</p>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top:22px;">
+    <div class="card-head">
+        <h3>⏳ Alacak Yaşlandırma (Açık Faturalar)</h3>
+        <span class="muted">Açık: <strong>{{ "%.2f"|format(acik_toplam) }} {{ CURRENCY }}</strong> · Vadesi geçen:
+            <strong style="color:var(--danger);">{{ "%.2f"|format(gecikmis_toplam) }} {{ CURRENCY }}</strong></span>
+    </div>
+    {% if aging %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>Fatura</th><th>Müşteri</th><th>Vade</th><th>Durum</th><th class="right">Kalan</th></tr></thead>
+            <tbody>
+                {% for r in aging %}
+                <tr>
+                    <td><a href="{{ url_for('invoices.detail', iid=r.id) }}"><strong>{{ r.fatura_no }}</strong></a></td>
+                    <td>{{ r.musteri_unvan or '—' }}</td>
+                    <td class="muted">{{ r.vade_tarihi or '—' }}</td>
+                    <td>
+                        {% if r.gecikme_gun is none %}<span class="badge badge-gray">Vade yok</span>
+                        {% elif r.gecikme_gun > 0 %}<span class="badge badge-red">{{ r.gecikme_gun }} gün gecikmiş</span>
+                        {% else %}<span class="badge badge-green">{{ -r.gecikme_gun }} gün kaldı</span>{% endif %}
+                    </td>
+                    <td class="right"><strong>{{ "%.2f"|format(r.kalan) }} {{ CURRENCY }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty"><div class="big">✅</div><p>Açık alacağınız yok. Tüm faturalar tahsil edilmiş.</p></div>
+    {% endif %}
+</div>
+
+<!-- Gelişmiş Rapor Linkleri -->
+<div class="rpt-grid">
+    <a href="{{ url_for('reports.bilanco') }}" class="rpt-card">
+        <span class="rpt-card-ico">🏛️</span>
+        <div class="rpt-card-title">Bilanço</div>
+        <div class="rpt-card-sub">Aktif / Pasif özet</div>
+    </a>
+    <a href="{{ url_for('reports.nakit_akisi') }}" class="rpt-card">
+        <span class="rpt-card-ico">💧</span>
+        <div class="rpt-card-title">Nakit Akışı</div>
+        <div class="rpt-card-sub">90 günlük tahmin</div>
+    </a>
+    <a href="{{ url_for('reports.karsilastirma') }}" class="rpt-card">
+        <span class="rpt-card-ico">📊</span>
+        <div class="rpt-card-title">Dönem Karşılaştırma</div>
+        <div class="rpt-card-sub">Bu ay / geçen ay</div>
+    </a>
+    <a href="{{ url_for('reports.musteri_karlilik') }}" class="rpt-card">
+        <span class="rpt-card-ico">👑</span>
+        <div class="rpt-card-title">Müşteri Karlılığı</div>
+        <div class="rpt-card-sub">Ciro & tahsilat analizi</div>
+    </a>
+    <a href="{{ url_for('reports.denetim_kaydi') }}" class="rpt-card">
+        <span class="rpt-card-ico">🔍</span>
+        <div class="rpt-card-title">Denetim Kaydı</div>
+        <div class="rpt-card-sub">Kim ne zaman ne yaptı</div>
+    </a>
+    <a href="{{ url_for('exports.suppliers_csv') }}" class="rpt-card">
+        <span class="rpt-card-ico">📤</span>
+        <div class="rpt-card-title">Tedarikçi CSV</div>
+        <div class="rpt-card-sub">Tedarikçi listesi dışa aktar</div>
+    </a>
+</div>
+
+<div class="grid-2" style="margin-top:22px;">
+    <div class="card">
+        <div class="card-head"><h3>🏆 En Çok Satan Ürünler</h3></div>
+        <div class="card-pad">
+            {% if top_urun %}
+                {% for t in top_urun %}
+                <div class="flex between" style="padding:9px 0; {{ 'border-bottom:1px solid var(--border);' if not loop.last }}">
+                    <span class="flex" style="gap:10px;"><span class="avatar" style="width:28px;height:28px;font-size:.72rem;border-radius:9px;">{{ loop.index }}</span>{{ t.urun_kodu }}</span>
+                    <span><span class="muted" style="font-size:.82rem;">{{ t.adet }} adet ·</span> <strong>{{ "%.0f"|format(t.toplam) }} {{ CURRENCY }}</strong></span>
+                </div>
+                {% endfor %}
+            {% else %}<div class="empty" style="padding:30px;"><div class="big">📦</div><p>Veri yok.</p></div>{% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>⚠️ Düşük Stok Uyarısı</h3></div>
+        <div class="card-pad">
+            {% if dusuk_stok %}
+                {% for p in dusuk_stok %}
+                <div class="flex between" style="padding:9px 0; {{ 'border-bottom:1px solid var(--border);' if not loop.last }}">
+                    <span>{{ p.name }}</span>
+                    <span class="badge {{ 'badge-red' if (p.stok or 0) <= 5 else 'badge-amber' }}">{{ p.stok or 0 }} adet</span>
+                </div>
+                {% endfor %}
+            {% else %}<div class="empty" style="padding:30px;"><div class="big">✅</div><p>Stoklar yeterli.</p></div>{% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+new Chart(document.getElementById('cIE'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Gelir', 'Alış', 'Gider'],
+        datasets: [{
+            data: [{{ ie.gelir }}, {{ ie.alis }}, {{ ie.gider }}],
+            backgroundColor: ['#10b981', '#f59e0b', '#f43f5e'],
+            borderWidth: 0
+        }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, cutout: '62%' }
+});
+</script>
+{% endblock %}

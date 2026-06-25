@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+{% set active = 'kisisellestir' %}
+{% block title %}Kişiselleştirme{% endblock %}
+{% block heading %}Kişiselleştirme{% endblock %}
+{% block crumb %}Uygulamanın görünümünü kişiselleştirin{% endblock %}
+
+{% block content %}
+<form method="post" action="{{ url_for('settings.kisisellestir') }}" style="max-width:720px;">
+<div style="display:flex; flex-direction:column; gap:20px;">
+
+    <!-- ── 1. MARKA RENGİ ── -->
+    <div class="card">
+        <div class="card-head"><h3>🎨 Marka Rengi</h3></div>
+        <div class="card-pad">
+            <p class="muted" style="font-size:.88rem; margin-bottom:16px;">
+                Butonlar, aktif menü öğesi ve vurgu elemanlarında kullanılır.
+            </p>
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    {% set renkler = [
+                        ('#7c3aed','Mor'),('#2563eb','Mavi'),('#059669','Yeşil'),
+                        ('#d97706','Turuncu'),('#dc2626','Kırmızı'),('#db2777','Pembe'),
+                        ('#0891b2','Turkuaz'),('#1f2937','Antrasit'),('#f59e0b','Amber'),
+                    ] %}
+                    {% for hex, ad in renkler %}
+                    <button type="button" title="{{ ad }}" onclick="setMarka('{{ hex }}')"
+                        style="width:36px;height:36px;border-radius:10px;
+                               border:3px solid {{ 'var(--primary)' if s.marka_renk == hex else 'transparent' }};
+                               background:{{ hex }};cursor:pointer;transition:transform .12s;outline:none;"
+                        onmouseover="this.style.transform='scale(1.18)'"
+                        onmouseout="this.style.transform='scale(1)'">
+                    </button>
+                    {% endfor %}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="color" id="markaPicker" value="{{ s.marka_renk or '#7c3aed' }}"
+                           style="width:44px;height:44px;border:none;border-radius:10px;cursor:pointer;padding:2px;"
+                           oninput="setMarka(this.value)">
+                    <span class="muted" style="font-size:.82rem;">Özel</span>
+                </div>
+            </div>
+            <input type="hidden" name="marka_renk" id="markaInput" value="{{ s.marka_renk or '' }}">
+            <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);">
+                <div id="markaBar" style="height:7px;background:{{ s.marka_renk or 'var(--grad)' }};"></div>
+                <div style="padding:14px 18px;display:flex;align-items:center;gap:10px;background:var(--surface-2);">
+                    <div id="markaBtn" style="padding:8px 18px;border-radius:10px;color:#fff;font-weight:700;font-size:.86rem;background:{{ s.marka_renk or '#7c3aed' }};">Buton</div>
+                    <div id="markaBadge" style="padding:4px 12px;border-radius:999px;color:#fff;font-size:.76rem;font-weight:800;background:{{ s.marka_renk or '#7c3aed' }};">Rozet</div>
+                    <span class="muted" style="font-size:.8rem;">↑ Canlı önizleme</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 2. İKİNCİL VURGU RENGİ ── -->
+    <div class="card">
+        <div class="card-head"><h3>🔵 İkincil Vurgu Rengi</h3></div>
+        <div class="card-pad">
+            <p class="muted" style="font-size:.88rem; margin-bottom:16px;">
+                Grafikler, ikonlar ve gradient'lerdeki ikincil renk. Marka rengiyle harmanlıdır.
+            </p>
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    {% set renkler2 = [
+                        ('#ec4899','Pembe'),('#f43f5e','Kırmızı'),('#f59e0b','Amber'),
+                        ('#10b981','Yeşil'),('#06b6d4','Cyan'),('#8b5cf6','Lila'),
+                        ('#6366f1','İndigo'),('#0ea5e9','Gökyüzü'),
+                    ] %}
+                    {% for hex, ad in renkler2 %}
+                    <button type="button" title="{{ ad }}" onclick="setIkincil('{{ hex }}')"
+                        style="width:36px;height:36px;border-radius:10px;
+                               border:3px solid {{ 'var(--accent)' if s.ikincil_renk == hex else 'transparent' }};
+                               background:{{ hex }};cursor:pointer;transition:transform .12s;outline:none;"
+                        onmouseover="this.style.transform='scale(1.18)'"
+                        onmouseout="this.style.transform='scale(1)'"
+                        data-ikincil="{{ hex }}">
+                    </button>
+                    {% endfor %}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="color" id="ikincilPicker" value="{{ s.ikincil_renk or '#ec4899' }}"
+                           style="width:44px;height:44px;border:none;border-radius:10px;cursor:pointer;padding:2px;"
+                           oninput="setIkincil(this.value)">
+                    <span class="muted" style="font-size:.82rem;">Özel</span>
+                </div>
+            </div>
+            <input type="hidden" name="ikincil_renk" id="ikincilInput" value="{{ s.ikincil_renk or '' }}">
+            <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);">
+                <div id="ikincilGrad" style="height:7px;background:linear-gradient(90deg, {{ s.marka_renk or '#7c3aed' }}, {{ s.ikincil_renk or '#ec4899' }});"></div>
+                <div style="padding:12px 18px;display:flex;align-items:center;gap:10px;background:var(--surface-2);">
+                    <div id="ikincilDot" style="width:12px;height:12px;border-radius:50%;background:{{ s.ikincil_renk or '#ec4899' }};flex-shrink:0;"></div>
+                    <span style="font-size:.84rem;font-weight:600;color:var(--text);">Grafikler ve ikonlar bu rengi kullanır</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 3. YAZI TİPİ ── -->
+    <div class="card">
+        <div class="card-head"><h3>🔤 Yazı Tipi</h3></div>
+        <div class="card-pad">
+            <p class="muted" style="font-size:.88rem; margin-bottom:16px;">
+                Tüm uygulama genelinde kullanılacak font ailesi.
+            </p>
+            <div class="ks-font-grid">
+                {% set fontlar = [
+                    ('Inter',   'Inter',   'Aa Bb 123'),
+                    ('Poppins', 'Poppins', 'Aa Bb 123'),
+                    ('Nunito',  'Nunito',  'Aa Bb 123'),
+                    ('Roboto',  'Roboto',  'Aa Bb 123'),
+                ] %}
+                {% for fid, fad, ornk in fontlar %}
+                <label class="ks-font-card" style="font-family: '{{ fid }}', sans-serif;">
+                    <input type="radio" name="yazi_tipi" value="{{ fid }}"
+                           {{ 'checked' if (s.yazi_tipi == fid) or (not s.yazi_tipi and fid == 'Inter') }}>
+                    <div class="ks-font-sample">{{ ornk }}</div>
+                    <div class="ks-font-name">{{ fad }}</div>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 4. KÖŞE YUVARLAKLIGI ── -->
+    <div class="card">
+        <div class="card-head"><h3>◻️ Köşe Yuvarlaklığı</h3></div>
+        <div class="card-pad">
+            <p class="muted" style="font-size:.88rem; margin-bottom:16px;">
+                Kart, buton ve modal köşelerinin ne kadar yuvarlandığını belirler.
+            </p>
+            <div class="ks-radius-grid">
+                {% set radyuslar = [
+                    ('keskin',  8,  'Keskin',  'Geometrik, minimal'),
+                    ('orta',    20, 'Orta',    'Varsayılan, dengeli'),
+                    ('yuvarlak',28, 'Yuvarlak','Yumuşak, samimi'),
+                ] %}
+                {% for rid, rval, rad, rdesc in radyuslar %}
+                <label class="ks-radius-card" style="border-radius:{{ rval }}px;">
+                    <input type="radio" name="kose_yuvarlak" value="{{ rid }}"
+                           {{ 'checked' if (s.kose_yuvarlak == rid) or (not s.kose_yuvarlak and rid == 'orta') }}>
+                    <div class="ks-r-box" style="border-radius:{{ rval }}px;"></div>
+                    <div class="ks-r-label">{{ rad }}</div>
+                    <div class="muted" style="font-size:.76rem; margin-top:3px;">{{ rdesc }}</div>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 5. KENAR ÇUBUĞU GENİŞLİĞİ ── -->
+    <div class="card">
+        <div class="card-head"><h3>📐 Kenar Çubuğu Genişliği</h3></div>
+        <div class="card-pad">
+            <p class="muted" style="font-size:.88rem; margin-bottom:16px;">
+                Sol menünün kapladığı alan. Küçük ekranlarda kompakt tercih edilir.
+            </p>
+            <div class="ks-sidebar-grid">
+                {% set sblar = [
+                    ('kompakt', 28, 72, 'Kompakt', '220px'),
+                    ('normal',  36, 72, 'Normal',  '268px'),
+                    ('genis',   48, 72, 'Geniş',   '310px'),
+                ] %}
+                {% for sid, sbw, sbcw, sad, spx in sblar %}
+                <label class="ks-sidebar-card">
+                    <input type="radio" name="sidebar_genislik" value="{{ sid }}"
+                           {{ 'checked' if (s.sidebar_genislik == sid) or (not s.sidebar_genislik and sid == 'normal') }}>
+                    <div class="ks-sb-preview">
+                        <div class="ks-sb-bar" style="width:{{ sbw }}px;"></div>
+                        <div class="ks-sb-content" style="width:{{ sbcw }}px;"></div>
+                    </div>
+                    <div class="ks-sb-label">{{ sad }}</div>
+                    <div class="muted" style="font-size:.76rem; margin-top:2px;">{{ spx }}</div>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 6. KOMPAKT MOD ── -->
+    <div class="card">
+        <div class="card-head"><h3>📏 Yoğunluk & Boşluk</h3></div>
+        <div class="card-pad" style="display:flex; flex-direction:column; gap:10px;">
+            <div class="ks-toggle-row">
+                <div>
+                    <div style="font-weight:700; font-size:.92rem; color:var(--text);">Kompakt Mod</div>
+                    <div class="muted" style="font-size:.8rem; margin-top:2px;">Daha sıkışık yerleşim, daha fazla içerik görünür</div>
+                </div>
+                <label class="ks-toggle-switch">
+                    <input type="checkbox" name="kompakt_mod" value="1" {{ 'checked' if s.kompakt_mod == '1' }}>
+                    <span class="ks-slider"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── KAYDET ── -->
+    <div class="flex" style="gap:10px;">
+        <button class="btn btn-primary" type="submit">💾 Kaydet</button>
+        <button type="button" class="btn btn-ghost" onclick="sifirla()">↺ Varsayılanlara Dön</button>
+        <a href="{{ url_for('billing.upgrade') }}" class="btn btn-ghost" style="margin-left:auto;">← Pro Sürüm</a>
+    </div>
+
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Nunito:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<script>
+var _marka = '{{ s.marka_renk or "#7c3aed" }}';
+var _ikincil = '{{ s.ikincil_renk or "#ec4899" }}';
+
+function setMarka(hex) {
+    _marka = hex;
+    document.getElementById('markaInput').value = hex;
+    document.getElementById('markaPicker').value = hex;
+    document.getElementById('markaBar').style.background = hex;
+    document.getElementById('markaBtn').style.background = hex;
+    document.getElementById('markaBadge').style.background = hex;
+    document.getElementById('ikincilGrad').style.background =
+        'linear-gradient(90deg,' + hex + ',' + _ikincil + ')';
+    document.querySelectorAll('[onclick^="setMarka"]').forEach(function(b) {
+        var m = b.getAttribute('onclick').match(/'([^']+)'/);
+        if (m) b.style.borderColor = m[1] === hex ? hex : 'transparent';
+    });
+}
+
+function setIkincil(hex) {
+    _ikincil = hex;
+    document.getElementById('ikincilInput').value = hex;
+    document.getElementById('ikincilPicker').value = hex;
+    document.getElementById('ikincilDot').style.background = hex;
+    document.getElementById('ikincilGrad').style.background =
+        'linear-gradient(90deg,' + _marka + ',' + hex + ')';
+    document.querySelectorAll('[data-ikincil]').forEach(function(b) {
+        b.style.borderColor = b.dataset.ikincil === hex ? hex : 'transparent';
+    });
+}
+
+function sifirla() {
+    if (!confirm('Tüm kişiselleştirme ayarları sıfırlansın mı?')) return;
+    document.querySelectorAll('input[type=radio]').forEach(function(r) {
+        r.checked = r.value === 'Inter' || r.value === 'orta' || r.value === 'normal';
+    });
+    document.querySelectorAll('input[type=checkbox]').forEach(function(c) { c.checked = false; });
+    setMarka('#7c3aed');
+    setIkincil('#ec4899');
+}
+</script>
+{% endblock %}

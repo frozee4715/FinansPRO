@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% set active = 'customers' %}
+{% block title %}{{ musteri.unvan }} — Ekstre{% endblock %}
+{% block heading %}Cari Ekstre{% endblock %}
+{% block crumb %}<a href="{{ url_for('customers.list') }}">Müşteriler</a> / {{ musteri.unvan }}{% endblock %}
+{% block actions %}
+    <a href="javascript:window.print()" class="btn btn-ghost btn-sm">🖨️ Yazdır</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-pad">
+        <div class="flex between" style="align-items:flex-start; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <div style="font-size:1.3rem; font-weight:800;">{{ musteri.unvan }}</div>
+                <div class="muted" style="font-size:.88rem;">
+                    {% if musteri.vergi_no %}VKN/TC: {{ musteri.vergi_no }} · {% endif %}
+                    {% if musteri.telefon %}{{ musteri.telefon }}{% endif %}
+                </div>
+            </div>
+            <div class="right">
+                <div class="muted" style="font-size:.82rem;">GÜNCEL BAKİYE</div>
+                <div style="font-size:1.5rem; font-weight:800; color:{{ 'var(--danger)' if bakiye > 0.01 else 'var(--success)' }};">
+                    {{ "%.2f"|format(bakiye) }} {{ CURRENCY }}
+                </div>
+                <div class="muted" style="font-size:.8rem;">{{ 'Borçlu' if bakiye > 0.01 else ('Alacaklı' if bakiye < -0.01 else 'Kapalı') }}</div>
+            </div>
+        </div>
+
+        {% if hareketler %}
+        <div class="table-wrap">
+            <table class="data">
+                <thead><tr><th>Tarih</th><th>Açıklama</th><th class="right">Borç</th><th class="right">Alacak</th><th class="right">Bakiye</th></tr></thead>
+                <tbody>
+                    {% for h in hareketler %}
+                    <tr>
+                        <td class="muted">{{ h.tarih or '—' }}</td>
+                        <td>{{ h.aciklama }}</td>
+                        <td class="right">{{ ("%.2f"|format(h.borc) + ' ' + CURRENCY) if h.borc else '—' }}</td>
+                        <td class="right" style="color:var(--success);">{{ ("%.2f"|format(h.alacak) + ' ' + CURRENCY) if h.alacak else '—' }}</td>
+                        <td class="right"><strong>{{ "%.2f"|format(h.bakiye) }} {{ CURRENCY }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty"><div class="big">🧾</div><p>Bu müşteriye ait hareket yok.</p></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script>
+        // Tema tercihini erken uygula (flash önler)
+        (function () {
+            try {
+                if (localStorage.getItem('theme') === 'dark')
+                    document.documentElement.setAttribute('data-theme', 'dark');
+            } catch (e) {}
+        })();
+    </script>
+    <title>{% block title %}{{ APP_NAME }}{% endblock %} · {{ APP_NAME }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% if YAZI_TIPI and YAZI_TIPI != 'Inter' %}
+    <link href="https://fonts.googleapis.com/css2?family={{ YAZI_TIPI }}:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    {% endif %}
+    {% if MARKA_RENK or IKINCIL_RENK or KOSE_YUVARLAK or YAZI_TIPI or SIDEBAR_GENISLIK %}
+    <style>
+        :root {
+            {% if MARKA_RENK %}
+            --primary: {{ MARKA_RENK }};
+            --primary-dark: {{ MARKA_RENK }};
+            --grad: linear-gradient(135deg, {{ MARKA_RENK }} 0%, {{ MARKA_RENK }}cc 50%, {% if IKINCIL_RENK %}{{ IKINCIL_RENK }}{% else %}#ec4899{% endif %} 100%);
+            --grad-soft: linear-gradient(135deg, {{ MARKA_RENK }}, {% if IKINCIL_RENK %}{{ IKINCIL_RENK }}{% else %}#ec4899{% endif %});
+            --ring: 0 0 0 4px {{ MARKA_RENK }}28;
+            {% endif %}
+            {% if IKINCIL_RENK %}
+            --accent: {{ IKINCIL_RENK }};
+            {% endif %}
+            {% if KOSE_YUVARLAK == 'keskin' %}
+            --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+            {% elif KOSE_YUVARLAK == 'yuvarlak' %}
+            --radius: 28px; --radius-sm: 20px; --radius-lg: 40px;
+            {% endif %}
+            {% if SIDEBAR_GENISLIK == 'kompakt' %}
+            --sidebar-w: 220px;
+            {% elif SIDEBAR_GENISLIK == 'genis' %}
+            --sidebar-w: 310px;
+            {% endif %}
+        }
+        {% if YAZI_TIPI %}
+        body, input, button, select, textarea, h1, h2, h3 {
+            font-family: '{{ YAZI_TIPI }}', system-ui, -apple-system, sans-serif;
+        }
+        {% endif %}
+    </style>
+    {% endif %}
+    {% include 'partials/pwa.html' %}
+    {% block head %}{% endblock %}
+</head>
+<body{% if KOMPAKT_MOD == '1' %} data-compact="1"{% endif %}>
+<div class="layout">
+    <!-- Kenar çubuğu -->
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-logo"><img src="{{ url_for('static', filename='img/logo-mark.svg') }}" alt=""></span>
+            <span>{{ APP_NAME }}</span>
+        </div>
+
+        <nav class="nav">
+            <span class="nav-label">Genel</span>
+            <a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if active=='dashboard' }}">
+                <span class="ico">📊</span> Gösterge Paneli
+            </a>
+
+            <span class="nav-label">İşlemler</span>
+            <a href="{{ safe_url('products.list') }}" class="{{ 'active' if active=='products' }}">
+                <span class="ico">📦</span> Ürünler
+            </a>
+            <a href="{{ safe_url('customers.list') }}" class="{{ 'active' if active=='customers' }}">
+                <span class="ico">🤝</span> Müşteriler
+            </a>
+            <a href="{{ safe_url('invoices.list') }}" class="{{ 'active' if active=='invoices' }}">
+                <span class="ico">🧾</span> Faturalar
+            </a>
+            <a href="{{ safe_url('recurring.list') }}" class="{{ 'active' if active=='recurring' }}">
+                <span class="ico">🔄</span> Tekrarlayan
+            </a>
+            <a href="{{ safe_url('payments.list') }}" class="{{ 'active' if active=='payments' }}">
+                <span class="ico">💳</span> Ödemeler
+            </a>
+            <a href="{{ safe_url('expenses.list') }}" class="{{ 'active' if active=='expenses' }}">
+                <span class="ico">💸</span> Giderler
+            </a>
+            <a href="{{ safe_url('suppliers.list') }}" class="{{ 'active' if active=='suppliers' }}">
+                <span class="ico">🏭</span> Tedarikçiler
+            </a>
+            <a href="{{ safe_url('checks.list') }}" class="{{ 'active' if active=='checks' }}">
+                <span class="ico">🧾</span> Çek / Senet
+            </a>
+            <a href="{{ safe_url('accounts.list') }}" class="{{ 'active' if active=='accounts' }}">
+                <span class="ico">🏦</span> Kasa / Banka
+            </a>
+            <a href="{{ safe_url('budget.index') }}" class="{{ 'active' if active=='budget' }}">
+                <span class="ico">🎯</span> Bütçe Takibi
+            </a>
+
+            <span class="nav-label">Analiz & Araçlar</span>
+            <a href="{{ safe_url('ai.chat') }}" class="{{ 'active' if active=='ai' }}">
+                <span class="ico">🤖</span> AI Asistan <span class="pro-badge">PRO</span>
+            </a>
+            <a href="{{ safe_url('billing.upgrade') }}" class="{{ 'active' if active=='billing' }}">
+                <span class="ico">✨</span> {{ 'Pro Aktif' if is_pro else 'Pro Sürüm' }}
+            </a>
+            {% if is_pro %}
+            <a href="{{ safe_url('settings.kisisellestir') }}" class="{{ 'active' if active=='kisisellestir' }}">
+                <span class="ico">🎨</span> Kişiselleştirme <span class="pro-badge">PRO</span>
+            </a>
+            <a href="{{ safe_url('backup.index') }}" class="{{ 'active' if active=='backup' }}">
+                <span class="ico">☁️</span> Yedekleme <span class="pro-badge">PRO</span>
+            </a>
+            <a href="{{ safe_url('destek.index') }}" class="{{ 'active' if active=='destek' }}">
+                <span class="ico">⚡</span> Destek <span class="pro-badge">PRO</span>
+            </a>
+            {% endif %}
+
+            {% if current_user and current_user.rol == 'admin' %}
+            <span class="nav-label">Yönetim</span>
+            <a href="{{ safe_url('settings.index') }}" class="{{ 'active' if active=='settings' }}">
+                <span class="ico">⚙️</span> Ayarlar
+            </a>
+            <a href="{{ safe_url('admin.users') }}" class="{{ 'active' if active=='admin' }}">
+                <span class="ico">🛡️</span> Admin Paneli
+            </a>
+            {% endif %}
+        </nav>
+
+        <div class="sidebar-foot">
+            <div class="user-chip">
+                <div class="avatar">{{ (current_user.name[0] if current_user else '?')|upper }}</div>
+                <div class="meta">
+                    <div class="nm">{{ current_user.name if current_user else 'Misafir' }}</div>
+                    <div class="rl">{{ 'Yönetici' if current_user and current_user.rol == 'admin' else 'Kullanıcı' }}</div>
+                </div>
+            </div>
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-sm btn-block" style="margin-top:12px;">
+                ⏻ Çıkış Yap
+            </a>
+        </div>
+    </aside>
+
+    <!-- İçerik -->
+    <div class="content">
+        <header class="topbar">
+            <div>
+                <h1>{% block heading %}{% endblock %}</h1>
+                <div class="crumb">{% block crumb %}{% endblock %}</div>
+            </div>
+            <div class="topbar-actions">
+                {% block actions %}{% endblock %}
+                <button type="button" class="theme-toggle" id="themeToggle" title="Karanlık / Açık mod" aria-label="Tema değiştir">🌙</button>
+            </div>
+        </header>
+
+        <main class="page">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</div>
+
+{% include 'partials/flashes.html' %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.0.3/dist/twemoji.min.js"
+        integrity="sha384-87FqG7RvL0CU7i3nP4AqSCq5NlIaF5+SNk84VJRSkTp6RvfmBvRXFjcTfCzmeHoz"
+        crossorigin="anonymous"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
+
+        // CSRF token'ını tüm POST formlarına otomatik enjekte et
+        var csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (csrfToken) {
+            var token = csrfToken.getAttribute('content');
+            document.querySelectorAll('form').forEach(function (form) {
+                var method = (form.getAttribute('method') || 'get').toLowerCase();
+                if (method === 'post') {
+                    var inp = document.createElement('input');
+                    inp.type = 'hidden';
+                    inp.name = '_csrf_token';
+                    inp.value = token;
+                    form.appendChild(inp);
+                }
+            });
+        }
+    });
+</script>
+{% block scripts %}{% endblock %}
+{% if current_user %}{% include 'partials/firebase.html' %}{% endif %}
+</body>
+</html>

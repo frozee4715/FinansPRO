@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% set active = 'products' %}
+{% block title %}Stok Hareketleri · {{ urun.name }}{% endblock %}
+{% block heading %}Stok Hareketleri{% endblock %}
+{% block crumb %}{{ urun.name }} — giriş ve çıkış geçmişi{% endblock %}
+{% block actions %}
+<a href="{{ url_for('products.list') }}" class="btn btn-ghost btn-sm">← Ürünlere Dön</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:860px; display:flex; flex-direction:column; gap:20px;">
+
+    <!-- Ürün özeti -->
+    <div class="card">
+        <div class="card-pad" style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+            <div style="width:56px;height:56px;border-radius:16px;background:var(--grad);
+                         color:#fff;display:grid;place-items:center;font-size:1.6rem;flex-shrink:0;">📦</div>
+            <div style="flex:1;">
+                <div style="font-weight:800; font-size:1.1rem;">{{ urun.name }}</div>
+                <div class="muted" style="font-size:.86rem;">{{ urun.aciklama or '—' }}</div>
+            </div>
+            <div style="text-align:right;">
+                <div class="muted" style="font-size:.8rem;">Güncel Stok</div>
+                <div style="font-size:1.8rem; font-weight:800;
+                             color:{{ 'var(--danger)' if urun.stok <= 5 else 'var(--success)' }};">
+                    {{ urun.stok }}
+                </div>
+                <div class="muted" style="font-size:.78rem;">adet</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Yeni hareket formu -->
+    <div class="card">
+        <div class="card-head"><h3>➕ Yeni Stok Hareketi</h3></div>
+        <div class="card-pad">
+            <form method="post" action="{{ url_for('products.stok_hareket', pid=urun.id) }}"
+                  style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+                <div class="field" style="margin:0; min-width:140px;">
+                    <label>Hareket Türü</label>
+                    <select class="input" name="tur">
+                        <option value="Giriş">📈 Giriş (Stok Ekle)</option>
+                        <option value="Çıkış">📉 Çıkış (Stok Düş)</option>
+                    </select>
+                </div>
+                <div class="field" style="margin:0; min-width:100px;">
+                    <label>Miktar</label>
+                    <input class="input" type="number" name="miktar" min="1" placeholder="0" required>
+                </div>
+                <div class="field" style="margin:0; flex:1; min-width:180px;">
+                    <label>Açıklama</label>
+                    <input class="input" type="text" name="aciklama" placeholder="Satın alma, iade vb.">
+                </div>
+                <button class="btn btn-primary" type="submit">Kaydet</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Hareket geçmişi -->
+    <div class="card">
+        <div class="card-head">
+            <h3>📋 Hareket Geçmişi</h3>
+            <span class="badge badge-blue">{{ hareketler|length }} kayıt</span>
+        </div>
+        {% if hareketler %}
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr><th>Tarih</th><th>Tür</th><th class="right">Miktar</th><th>Açıklama</th></tr>
+                </thead>
+                <tbody>
+                    {% for h in hareketler %}
+                    <tr>
+                        <td class="muted" style="font-size:.86rem;">{{ h.olusturulma[:16] if h.olusturulma else '—' }}</td>
+                        <td>
+                            <span class="badge {{ 'badge-green' if h.tur == 'Giriş' else 'badge-red' }}">
+                                {{ '📈' if h.tur == 'Giriş' else '📉' }} {{ h.tur }}
+                            </span>
+                        </td>
+                        <td class="right">
+                            <strong style="color:{{ 'var(--success)' if h.tur == 'Giriş' else 'var(--danger)' }};">
+                                {{ '+' if h.tur == 'Giriş' else '-' }}{{ h.miktar }}
+                            </strong>
+                        </td>
+                        <td class="muted">{{ h.aciklama or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">
+            <div class="big">📭</div>
+            <p>Henüz stok hareketi yok.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Fatura {{ f.fatura_no }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% if MARKA_RENK %}
+    <style>
+        :root {
+            --primary: {{ MARKA_RENK }};
+            --primary-dark: {{ MARKA_RENK }};
+            --grad: linear-gradient(135deg, {{ MARKA_RENK }} 0%, {{ MARKA_RENK }}cc 50%, #ec4899 100%);
+        }
+    </style>
+    {% endif %}
+</head>
+<body class="print-page">
+<div class="print-sheet">
+    <div class="print-bar no-print">
+        <a href="{{ url_for('invoices.detail', iid=f.id) }}" class="btn btn-ghost btn-sm">← Geri</a>
+        <button class="btn btn-primary btn-sm" onclick="window.print()">🖨️ Yazdır / PDF Kaydet</button>
+    </div>
+
+    <div class="invoice-doc">
+        <div class="flex between" style="align-items:flex-start; margin-bottom:28px;">
+            <div>
+                <div style="font-size:1.6rem; font-weight:800; color:var(--primary);">
+                    {{ sirket.sirket_unvan or APP_NAME }}
+                </div>
+                <div class="muted" style="font-size:.86rem; line-height:1.5; margin-top:4px;">
+                    {% if sirket.sirket_adres %}{{ sirket.sirket_adres }}<br>{% endif %}
+                    {% if sirket.sirket_vergi_no %}VKN: {{ sirket.sirket_vergi_no }}<br>{% endif %}
+                    {% if sirket.sirket_telefon %}Tel: {{ sirket.sirket_telefon }}{% endif %}
+                    {% if sirket.sirket_eposta %} · {{ sirket.sirket_eposta }}{% endif %}
+                </div>
+            </div>
+            <div class="right">
+                <div style="font-size:1.3rem; font-weight:800;">FATURA</div>
+                <div style="font-weight:700;">{{ f.fatura_no }}</div>
+                {% if f.fatura_tipi == 'Satış' %}<span class="badge badge-blue">Satış</span>
+                {% else %}<span class="badge badge-amber">Alış</span>{% endif %}
+            </div>
+        </div>
+
+        <div class="flex between" style="gap:20px; margin-bottom:24px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:220px;">
+                <div class="nav-label" style="padding-left:0;">SAYIN</div>
+                <div><strong>{{ f.musteri_unvan or '—' }}</strong></div>
+                <div class="muted" style="font-size:.86rem;">
+                    {% if f.vergi_no %}VKN/TC: {{ f.vergi_no }}<br>{% endif %}
+                    {% if f.adres %}{{ f.adres }}<br>{% endif %}
+                    {% if f.telefon %}{{ f.telefon }}{% endif %}
+                </div>
+            </div>
+            <div class="right">
+                <div class="nav-label">TARİH</div>
+                <div class="muted" style="font-size:.9rem;">
+                    Düzenleme: <strong>{{ f.tarih or '—' }}</strong><br>
+                    Vade: <strong>{{ f.vade_tarihi or '—' }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-wrap" style="border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden;">
+            <table class="data">
+                <thead><tr><th>Açıklama</th><th>Ürün Kodu</th><th class="right">Tutar</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>{{ f.acıklama or '—' }}</td>
+                        <td class="muted">{{ f.urun_kodu or '—' }}</td>
+                        <td class="right">{{ "%.2f"|format(f.Birim_Fiyat or 0) }} {{ CURRENCY }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="flex" style="justify-content:flex-end; margin-top:20px;">
+            <div style="min-width:300px;">
+                <div class="flex between" style="padding:7px 0; border-bottom:1px solid var(--border);">
+                    <span class="muted">Ara Toplam</span><span>{{ "%.2f"|format(f.ara_toplam or 0) }} {{ CURRENCY }}</span>
+                </div>
+                <div class="flex between" style="padding:7px 0; border-bottom:1px solid var(--border);">
+                    <span class="muted">İskonto (%{{ f.iskonto or 0 }})</span>
+                    <span>-{{ "%.2f"|format(f.iskonto_tutarı or 0) }} {{ CURRENCY }}</span>
+                </div>
+                <div class="flex between" style="padding:7px 0; border-bottom:1px solid var(--border);">
+                    <span class="muted">KDV (%{{ f.kdv or 0 }})</span><span>{{ "%.2f"|format(f.kdv_tutarı or 0) }} {{ CURRENCY }}</span>
+                </div>
+                <div class="flex between" style="padding:12px 0; border-bottom:2px solid var(--text);">
+                    <strong>Genel Toplam</strong>
+                    <strong style="font-size:1.2rem; color:var(--primary);">{{ "%.2f"|format(f.toplam_tutar or 0) }} {{ CURRENCY }}</strong>
+                </div>
+                <div class="flex between" style="padding:7px 0;">
+                    <span class="muted">Ödenen</span><span>{{ "%.2f"|format(odenen) }} {{ CURRENCY }}</span>
+                </div>
+                <div class="flex between" style="padding:7px 0;">
+                    <strong>Kalan Bakiye</strong>
+                    <strong>{{ "%.2f"|format((f.toplam_tutar or 0) - odenen) }} {{ CURRENCY }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="invoice-foot muted">
+            Bu belge {{ APP_NAME }} ile oluşturulmuştur.
+        </div>
+    </div>
+</div>
+</body>
+</html>

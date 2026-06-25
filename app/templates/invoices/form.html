@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% set active = 'invoices' %}
+{% block title %}Yeni Fatura{% endblock %}
+{% block heading %}Yeni Fatura{% endblock %}
+{% block crumb %}<a href="{{ url_for('invoices.list') }}">Faturalar</a> / Yeni{% endblock %}
+
+{% block content %}
+<div class="pay-form-grid">
+
+    <!-- Sol: Form -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+        <form method="post" action="{{ url_for('invoices.create') }}" id="invoiceForm">
+
+            <!-- Fatura bilgileri -->
+            <div class="card">
+                <div class="card-head"><h3>Fatura Bilgileri</h3></div>
+                <div class="card-pad" style="display:flex; flex-direction:column; gap:16px;">
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Fatura No</label>
+                            <input class="input" type="text" name="fatura_no"
+                                   value="{{ form.fatura_no if form else onerilen_no }}">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Fatura Tipi</label>
+                            <select class="input" name="fatura_tipi">
+                                <option value="Satış" {{ 'selected' if form and form.fatura_tipi=='Satış' }}>Satış</option>
+                                <option value="Alış" {{ 'selected' if form and form.fatura_tipi=='Alış' }}>Alış</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Müşteri *</label>
+                        <select class="input" name="musteri_id" required>
+                            <option value="">— Müşteri seçiniz —</option>
+                            {% for m in musteriler %}
+                            <option value="{{ m.id }}" {{ 'selected' if form and form.musteri_id==m.id|string }}>{{ m.unvan }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Tarih *</label>
+                            <input class="input" type="date" name="tarih" required value="{{ form.tarih if form else '' }}">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Vade Tarihi</label>
+                            <input class="input" type="date" name="vade_tarihi" value="{{ form.vade_tarihi if form else '' }}">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Kalem bilgileri -->
+            <div class="card">
+                <div class="card-head"><h3>Kalem Bilgileri</h3></div>
+                <div class="card-pad" style="display:flex; flex-direction:column; gap:16px;">
+
+                    <div style="display:grid; grid-template-columns:1fr 2fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Ürün Kodu</label>
+                            <input class="input" type="text" name="urun_kodu" value="{{ form.urun_kodu if form else '' }}" placeholder="Opsiyonel">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Açıklama</label>
+                            <input class="input" type="text" name="aciklama" value="{{ form.aciklama if form else '' }}" placeholder="Ürün/hizmet açıklaması">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Birim Fiyat ({{ CURRENCY }}) *</label>
+                            <input class="input calc" type="number" step="0.01" min="0" name="birim_fiyat" required
+                                   value="{{ form.birim_fiyat if form else '' }}" placeholder="0.00">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Miktar *</label>
+                            <input class="input calc" type="number" step="1" min="1" name="miktar" required
+                                   value="{{ form.miktar if form else '1' }}" placeholder="1">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">İskonto (%)</label>
+                            <input class="input calc" type="number" step="0.01" min="0" name="iskonto"
+                                   value="{{ form.iskonto if form else '0' }}" placeholder="0">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">KDV (%)</label>
+                            <input class="input calc" type="number" step="0.01" min="0" name="kdv"
+                                   value="{{ form.kdv if form else '20' }}" placeholder="20">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" type="submit" {{ 'disabled' if not musteriler }} style="flex:1;">
+                    🧾 Faturayı Oluştur
+                </button>
+                <a href="{{ url_for('invoices.list') }}" class="btn btn-ghost">İptal</a>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Sağ: Hesap özeti + bilgi paneli -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <!-- Canlı hesaplama -->
+        <div class="card">
+            <div class="card-head"><h3>Hesap Özeti</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:2px;">
+                <div class="pay-ozet-row" style="padding:10px 0; border-bottom:1px solid var(--border);">
+                    <span class="pay-ozet-lbl">Ara Toplam</span>
+                    <span class="pay-ozet-val" id="oAra">0.00 {{ CURRENCY }}</span>
+                </div>
+                <div class="pay-ozet-row" style="padding:10px 0; border-bottom:1px solid var(--border);">
+                    <span class="pay-ozet-lbl">İskonto</span>
+                    <span class="pay-ozet-val" id="oIsk" style="color:var(--danger);">- 0.00 {{ CURRENCY }}</span>
+                </div>
+                <div class="pay-ozet-row" style="padding:10px 0; border-bottom:1px solid var(--border);">
+                    <span class="pay-ozet-lbl">Matrah</span>
+                    <span class="pay-ozet-val" id="oMatrah">0.00 {{ CURRENCY }}</span>
+                </div>
+                <div class="pay-ozet-row" style="padding:10px 0; border-bottom:1px solid var(--border);">
+                    <span class="pay-ozet-lbl">KDV</span>
+                    <span class="pay-ozet-val" id="oKdv">0.00 {{ CURRENCY }}</span>
+                </div>
+                <div class="pay-ozet-row" style="padding:14px 0 4px;">
+                    <span style="font-weight:700; font-size:.9rem;">Genel Toplam</span>
+                    <span id="oTop" style="font-weight:800; font-size:1.4rem; color:var(--primary);">0.00 {{ CURRENCY }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- İpuçları -->
+        <div class="card">
+            <div class="form-aside-hero">
+                <span class="fa-ico">🧾</span>
+                <h4>Fatura Oluşturma</h4>
+                <p>Doğru fatura bilgileri; tahsilat takibini ve muhasebe raporlarını otomatikleştirir.</p>
+            </div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px; padding-top:14px;">
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">🔢</span><span>Fatura numarası otomatik oluşturulur; isterseniz değiştirebilirsiniz.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">📅</span><span>Vade tarihi girilmezse fatura vadesi belli olmayan olarak takip edilir.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">💸</span><span>Fatura oluşturduktan sonra "Ödeme Al" butonuyla ödemeyi kaydedin.</span></div>
+            </div>
+        </div>
+
+        {% if not musteriler %}
+        <div class="card" style="border-color:var(--warning);">
+            <div class="card-pad" style="text-align:center; padding:20px;">
+                <div style="font-size:2rem; margin-bottom:8px;">⚠️</div>
+                <div style="font-weight:700; margin-bottom:6px;">Müşteri Bulunamadı</div>
+                <p class="muted" style="font-size:.84rem; margin-bottom:12px;">Fatura oluşturmak için önce müşteri eklemeniz gerekiyor.</p>
+                <a href="{{ url_for('customers.create') }}" class="btn btn-primary btn-sm">+ Müşteri Ekle</a>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function hesapla() {
+    var bf = parseFloat(document.querySelector('[name=birim_fiyat]').value) || 0;
+    var mk = parseFloat(document.querySelector('[name=miktar]').value) || 0;
+    var isk = parseFloat(document.querySelector('[name=iskonto]').value) || 0;
+    var kdv = parseFloat(document.querySelector('[name=kdv]').value) || 0;
+    var ara = bf * mk;
+    var iskT = ara * isk / 100;
+    var matrah = ara - iskT;
+    var kdvT = matrah * kdv / 100;
+    var top = matrah + kdvT;
+    var f = function(n) { return n.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' {{ CURRENCY }}'; };
+    document.getElementById('oAra').textContent = f(ara);
+    document.getElementById('oIsk').textContent = '- ' + f(iskT);
+    document.getElementById('oMatrah').textContent = f(matrah);
+    document.getElementById('oKdv').textContent = f(kdvT);
+    document.getElementById('oTop').textContent = f(top);
+}
+document.querySelectorAll('.calc').forEach(function(el) { el.addEventListener('input', hesapla); });
+hesapla();
+</script>
+{% endblock %}

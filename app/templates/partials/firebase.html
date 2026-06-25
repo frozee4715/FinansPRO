@@ -1,0 +1,17 @@
+{% if FCM_API_KEY %}
+<!-- Firebase Cloud Messaging -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+<script>
+    window.FCM_CONFIG = {
+        apiKey:            {{ FCM_API_KEY | tojson }},
+        authDomain:        {{ FCM_AUTH_DOMAIN | tojson }},
+        projectId:         {{ FCM_PROJECT_ID | tojson }},
+        storageBucket:     {{ FCM_STORAGE_BUCKET | tojson }},
+        messagingSenderId: {{ FCM_MESSAGING_SENDER_ID | tojson }},
+        appId:             {{ FCM_APP_ID | tojson }}
+    };
+    window.FCM_VAPID_KEY = {{ FCM_VAPID_KEY | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/firebase-push.js') }}"></script>
+{% endif %}

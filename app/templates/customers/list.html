@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% set active = 'customers' %}
+{% block title %}Müşteriler{% endblock %}
+{% block heading %}Müşteriler{% endblock %}
+{% block crumb %}Cari hesap yönetimi{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('exports.customers_csv') }}" class="btn btn-ghost btn-sm">⬇️ CSV</a>
+    <a href="{{ url_for('customers.create') }}" class="btn btn-primary btn-sm">＋ Yeni Müşteri</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-head">
+        <h3>Müşteri Listesi <span class="muted" style="font-weight:500;">({{ musteriler|length }})</span></h3>
+        <form method="get" class="flex" style="gap:8px;">
+            <input class="input btn-sm" style="width:240px;" type="text" name="q" value="{{ q }}" placeholder="🔍 Ünvan, vergi no, e-posta...">
+            <button class="btn btn-ghost btn-sm" type="submit">Ara</button>
+            {% if q %}<a href="{{ url_for('customers.list') }}" class="btn btn-ghost btn-sm">✕</a>{% endif %}
+        </form>
+    </div>
+
+    {% if musteriler %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr><th>#</th><th>Ünvan</th><th>Vergi/TC No</th><th>Telefon</th><th>E-posta</th><th class="right">İşlem</th></tr>
+            </thead>
+            <tbody>
+                {% for m in musteriler %}
+                <tr>
+                    <td class="muted">{{ m.id }}</td>
+                    <td><strong>{{ m.unvan }}</strong><br><span class="muted" style="font-size:.82rem;">{{ m.adres or '' }}</span></td>
+                    <td class="muted">{{ m.vergi_no or '—' }}</td>
+                    <td class="muted">{{ m.telefon or '—' }}</td>
+                    <td class="muted">{{ m.eposta or '—' }}</td>
+                    <td class="right">
+                        <div class="flex" style="justify-content:flex-end; gap:6px;">
+                            <a href="{{ url_for('customers.statement', cid=m.id) }}" class="btn btn-ghost btn-sm">Ekstre</a>
+                            <a href="{{ url_for('customers.edit', cid=m.id) }}" class="btn btn-ghost btn-sm">Düzenle</a>
+                            <form method="post" action="{{ url_for('customers.delete', cid=m.id) }}"
+                                  data-confirm="“{{ m.unvan }}” müşterisini silmek istediğinize emin misiniz?">
+                                <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">🤝</div>
+        <p>{{ 'Aramanıza uygun müşteri bulunamadı.' if q else 'Henüz müşteri eklenmemiş.' }}</p>
+        <a href="{{ url_for('customers.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">İlk müşteriyi ekle</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

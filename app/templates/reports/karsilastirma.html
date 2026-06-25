@@ -1,0 +1,268 @@
+{% extends 'base.html' %}
+{% set active = 'reports' %}
+{% block title %}Dönemsel Karşılaştırma{% endblock %}
+{% block heading %}Dönemsel Karşılaştırma{% endblock %}
+{% block crumb %}Bu ay · Geçen ay · Geçen yıl aynı ay{% endblock %}
+
+{% set bu   = data.bu_ay %}
+{% set prev = data.gecen_ay %}
+{% set yilb = data.gecen_yil %}
+
+{% block content %}
+{% set bu_net   = bu.gelir   - bu.gider %}
+{% set prev_net = prev.gelir - prev.gider %}
+{% set yilb_net = yilb.gelir - yilb.gider %}
+
+{% macro degisim(yeni, eski) %}
+  {% if eski > 0 %}
+    {% set pct = (yeni - eski) / eski * 100 %}
+    <span class="kpi-badge {{ 'up' if pct >= 0 else 'down' }}">{{ '+' if pct >= 0 else '' }}{{ "%.1f"|format(pct) }}%</span>
+  {% else %}
+    <span class="kpi-badge neu">—</span>
+  {% endif %}
+{% endmacro %}
+
+<!-- Dönem seçici -->
+<form method="get" class="cmp-filter-bar">
+    <div class="cmp-filter-inner">
+        <div class="cmp-filter-group">
+            <label class="cmp-filter-label">Yıl</label>
+            <input class="input" type="number" name="yil" value="{{ yil }}" min="2020" max="2035" style="width:100px;">
+        </div>
+        <div class="cmp-filter-group">
+            <label class="cmp-filter-label">Ay</label>
+            <select class="input" name="ay" style="width:130px;">
+                {% set ay_adlari = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'] %}
+                {% for i in range(1,13) %}
+                <option value="{{ i }}" {{ 'selected' if i==ay }}>{{ ay_adlari[i-1] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button class="btn btn-primary" type="submit">Karşılaştır</button>
+    </div>
+    <div class="cmp-filter-period">
+        <span class="badge badge-blue">{{ ay_adlari[ay-1] }} {{ yil }}</span>
+        <span class="muted" style="font-size:.8rem;">karşılaştırma dönemi</span>
+    </div>
+</form>
+
+<!-- 3 dönem kartı -->
+<div class="cmp-period-grid">
+
+    <!-- Bu Ay -->
+    <div class="cmp-period-card cmp-current">
+        <div class="cmp-period-head">
+            <span class="cmp-period-dot" style="background:var(--success)"></span>
+            <div>
+                <div class="cmp-period-title">Bu Ay</div>
+                <div class="cmp-period-sub">{{ bu.ay }}</div>
+            </div>
+            <span class="cmp-period-badge">Güncel</span>
+        </div>
+        <div class="cmp-period-stats">
+            <div class="cmp-stat">
+                <span class="cmp-stat-lbl">Gelir</span>
+                <span class="cmp-stat-val green">{{ "%.0f"|format(bu.gelir) }} {{ CURRENCY }}</span>
+                {{ degisim(bu.gelir, prev.gelir) }}
+            </div>
+            <div class="cmp-stat">
+                <span class="cmp-stat-lbl">Gider</span>
+                <span class="cmp-stat-val red">{{ "%.0f"|format(bu.gider) }} {{ CURRENCY }}</span>
+            </div>
+            <div class="cmp-stat cmp-stat-net">
+                <span class="cmp-stat-lbl">Net Kâr</span>
+                <span class="cmp-stat-val {{ 'green' if bu_net >= 0 else 'red' }}" style="font-size:1.25rem; font-weight:700;">
+                    {{ "%.0f"|format(bu_net) }} {{ CURRENCY }}
+                </span>
+                {{ degisim(bu_net, prev_net) }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Geçen Ay -->
+    <div class="cmp-period-card">
+        <div class="cmp-period-head">
+            <span class="cmp-period-dot" style="background:#6366f1"></span>
+            <div>
+                <div class="cmp-period-title">Geçen Ay</div>
+                <div class="cmp-period-sub">{{ prev.ay }}</div>
+            </div>
+        </div>
+        <div class="cmp-period-stats">
+            <div class="cmp-stat">
+                <span class="cmp-stat-lbl">Gelir</span>
+                <span class="cmp-stat-val green">{{ "%.0f"|format(prev.gelir) }} {{ CURRENCY }}</span>
+            </div>
+            <div class="cmp-stat">
+                <span class="cmp-stat-lbl">Gider</span>
+                <span class="cmp-stat-val red">{{ "%.0f"|format(prev.gider) }} {{ CURRENCY }}</span>
+            </div>
+            <div class="cmp-stat cmp-stat-net">
+                <span class="cmp-stat-lbl">Net Kâr</span>
+                <span class="cmp-stat-val {{ 'green' if prev_net >= 0 else 'red' }}" style="font-size:1.25rem; font-weight:700;">
+                    {{ "%.0f"|format(prev_net) }} {{ CURRENCY }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Geçen Yıl -->
+    <div class="cmp-period-card">
+        <div class="cmp-period-head">
+            <span class="cmp-period-dot" style="background:#f59e0b"></span>
+            <div>
+                <div class="cmp-period-title">Geçen Yıl Aynı Ay</div>
+                <div class="cmp-period-sub">{{ yilb.ay }}</div>
+            </div>
+        </div>
+        <div class="cmp-period-stats">
+            <div class="cmp-stat">
+                <span class="cmp-stat-lbl">Gelir</span>
+                <span class="cmp-stat-val green">{{ "%.0f"|format(yilb.gelir) }} {{ CURRENCY }}</span>
+                {{ degisim(bu.gelir, yilb.gelir) }}
+            </div>
+            <div class="cmp-stat">
+                <span class="cmp-stat-lbl">Gider</span>
+                <span class="cmp-stat-val red">{{ "%.0f"|format(yilb.gider) }} {{ CURRENCY }}</span>
+            </div>
+            <div class="cmp-stat cmp-stat-net">
+                <span class="cmp-stat-lbl">Net Kâr</span>
+                <span class="cmp-stat-val {{ 'green' if yilb_net >= 0 else 'red' }}" style="font-size:1.25rem; font-weight:700;">
+                    {{ "%.0f"|format(yilb_net) }} {{ CURRENCY }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Grafik + tablo -->
+<div class="cmp-bottom-grid">
+
+    <!-- Bar chart -->
+    <div class="card">
+        <div class="card-head"><h3>Görsel Karşılaştırma</h3></div>
+        <div class="card-pad">
+            <canvas id="cmpChart" height="220"></canvas>
+        </div>
+    </div>
+
+    <!-- Özet tablo -->
+    <div class="card">
+        <div class="card-head"><h3>Özet Tablo</h3></div>
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>Kalem</th>
+                        <th class="right">Bu Ay</th>
+                        <th class="right">Geçen Ay</th>
+                        <th class="right">Geçen Yıl</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span style="color:var(--success);">●</span> Gelir</td>
+                        <td class="right" style="color:var(--success);">{{ "%.2f"|format(bu.gelir) }} {{ CURRENCY }}</td>
+                        <td class="right" style="color:var(--success);">{{ "%.2f"|format(prev.gelir) }} {{ CURRENCY }}</td>
+                        <td class="right" style="color:var(--success);">{{ "%.2f"|format(yilb.gelir) }} {{ CURRENCY }}</td>
+                    </tr>
+                    <tr>
+                        <td><span style="color:var(--danger);">●</span> Gider</td>
+                        <td class="right" style="color:var(--danger);">{{ "%.2f"|format(bu.gider) }} {{ CURRENCY }}</td>
+                        <td class="right" style="color:var(--danger);">{{ "%.2f"|format(prev.gider) }} {{ CURRENCY }}</td>
+                        <td class="right" style="color:var(--danger);">{{ "%.2f"|format(yilb.gider) }} {{ CURRENCY }}</td>
+                    </tr>
+                    <tr style="font-weight:600; border-top:2px solid var(--border);">
+                        <td>Net Kâr</td>
+                        <td class="right" style="color:{{ 'var(--success)' if bu_net >= 0 else 'var(--danger)' }};">{{ "%.2f"|format(bu_net) }} {{ CURRENCY }}</td>
+                        <td class="right" style="color:{{ 'var(--success)' if prev_net >= 0 else 'var(--danger)' }};">{{ "%.2f"|format(prev_net) }} {{ CURRENCY }}</td>
+                        <td class="right" style="color:{{ 'var(--success)' if yilb_net >= 0 else 'var(--danger)' }};">{{ "%.2f"|format(yilb_net) }} {{ CURRENCY }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var gridColor = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+    var textColor = isDark ? '#94a3b8' : '#64748b';
+
+    new Chart(document.getElementById('cmpChart'), {
+        type: 'bar',
+        data: {
+            labels: ['Bu Ay ({{ bu.ay }})', 'Geçen Ay ({{ prev.ay }})', 'Geçen Yıl ({{ yilb.ay }})'],
+            datasets: [
+                {
+                    label: 'Gelir',
+                    data: [{{ bu.gelir }}, {{ prev.gelir }}, {{ yilb.gelir }}],
+                    backgroundColor: ['rgba(16,185,129,.8)', 'rgba(99,102,241,.8)', 'rgba(245,158,11,.8)'],
+                    borderRadius: 6,
+                },
+                {
+                    label: 'Gider',
+                    data: [{{ bu.gider }}, {{ prev.gider }}, {{ yilb.gider }}],
+                    backgroundColor: ['rgba(239,68,68,.5)', 'rgba(239,68,68,.35)', 'rgba(239,68,68,.25)'],
+                    borderRadius: 6,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { labels: { color: textColor } } },
+            scales: {
+                x: { ticks: { color: textColor }, grid: { color: gridColor } },
+                y: { ticks: { color: textColor }, grid: { color: gridColor } }
+            }
+        }
+    });
+}());
+</script>
+
+<style>
+.cmp-filter-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 20px;
+    margin-bottom: 20px;
+}
+.cmp-filter-inner { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.cmp-filter-group { display: flex; flex-direction: column; gap: 4px; }
+.cmp-filter-label { font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.cmp-filter-period { display: flex; align-items: center; gap: 8px; }
+
+.cmp-period-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+@media(max-width:900px) { .cmp-period-grid { grid-template-columns: 1fr; } }
+
+.cmp-period-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+}
+.cmp-current { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary)22; }
+.cmp-period-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.cmp-period-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cmp-period-title { font-weight: 700; font-size: .95rem; }
+.cmp-period-sub { font-size: .75rem; color: var(--muted); }
+.cmp-period-badge { margin-left: auto; font-size: .7rem; font-weight: 700; background: var(--primary)18; color: var(--primary); padding: 2px 8px; border-radius: 20px; }
+
+.cmp-period-stats { display: flex; flex-direction: column; gap: 12px; }
+.cmp-stat { display: flex; align-items: center; gap: 8px; }
+.cmp-stat-lbl { font-size: .78rem; color: var(--muted); width: 48px; flex-shrink: 0; }
+.cmp-stat-val { font-weight: 600; font-size: .9rem; }
+.cmp-stat-val.green { color: var(--success); }
+.cmp-stat-val.red { color: var(--danger); }
+.cmp-stat-net { padding-top: 12px; border-top: 1px solid var(--border); }
+
+.cmp-bottom-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+@media(max-width:900px) { .cmp-bottom-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}

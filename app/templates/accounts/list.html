@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% set active = 'accounts' %}
+{% block title %}Kasa / Banka Hesapları{% endblock %}
+{% block heading %}Kasa / Banka Hesapları{% endblock %}
+{% block crumb %}Tüm hesaplarınız ve anlık bakiyeleri{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('accounts.create') }}" class="btn btn-primary btn-sm">＋ Yeni Hesap</a>
+{% endblock %}
+
+{% block content %}
+<!-- Stat kartları -->
+<div class="stat-grid" style="margin-bottom:24px;">
+    <div class="stat">
+        <div class="stat-ico">🏦</div>
+        <div class="stat-label">Toplam Varlık</div>
+        <div class="stat-value">{{ "%.2f"|format(toplam_varlik) }} ₺</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico">🏧</div>
+        <div class="stat-label">Kasa Toplamı</div>
+        <div class="stat-value">{{ "%.2f"|format(kasa_toplam) }} ₺</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico">🏛️</div>
+        <div class="stat-label">Banka Toplamı</div>
+        <div class="stat-value">{{ "%.2f"|format(banka_toplam) }} ₺</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico">📋</div>
+        <div class="stat-label">Hesap Sayısı</div>
+        <div class="stat-value">{{ hesaplar|length }}</div>
+    </div>
+</div>
+
+<!-- Hesap kartları -->
+{% if hesaplar %}
+<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:16px;">
+    {% for h in hesaplar %}
+    <div class="card" style="margin-bottom:0;">
+        <div class="card-head" style="padding-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:1.6rem;">
+                    {% if h.tur == 'Kasa' %}🏧
+                    {% elif h.tur == 'Banka' %}🏛️
+                    {% elif h.tur == 'Kredi Kartı' %}💳
+                    {% else %}🗂️{% endif %}
+                </span>
+                <div>
+                    <div style="font-weight:600; font-size:1rem;">{{ h.ad }}</div>
+                    <span class="badge badge-blue" style="font-size:0.7rem;">{{ h.tur }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-pad" style="padding-top:0;">
+            <div style="font-size:1.5rem; font-weight:700; margin-bottom:6px;
+                 color: {{ 'var(--green)' if (h.bakiye or 0) >= 0 else 'var(--red)' }};">
+                {{ "%.2f"|format(h.bakiye or 0) }} {{ h.para_birimi or '₺' }}
+            </div>
+            {% if h.aciklama %}
+            <div class="muted" style="font-size:0.82rem; margin-bottom:10px;">{{ h.aciklama }}</div>
+            {% endif %}
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                <a href="{{ url_for('accounts.detail', aid=h.id) }}" class="btn btn-primary btn-sm">Hareketler</a>
+                <a href="{{ url_for('accounts.edit', aid=h.id) }}" class="btn btn-ghost btn-sm">Düzenle</a>
+                <form method="post" action="{{ url_for('accounts.delete', aid=h.id) }}"
+                      data-confirm="Bu hesabı silmek istediğinize emin misiniz? Tüm hareketler de silinecek.">
+                    <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <div class="empty">
+        <div class="big">🏦</div>
+        <p>Henüz hesap eklenmemiş.</p>
+        <a href="{{ url_for('accounts.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">İlk hesabı oluştur</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

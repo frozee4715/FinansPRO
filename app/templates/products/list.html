@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% set active = 'products' %}
+{% block title %}Ürünler{% endblock %}
+{% block heading %}Ürünler{% endblock %}
+{% block crumb %}Stok ve fiyat yönetimi{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('exports.products_csv') }}" class="btn btn-ghost btn-sm">⬇️ CSV</a>
+    <a href="{{ url_for('products.create') }}" class="btn btn-primary btn-sm">＋ Yeni Ürün</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-head">
+        <h3>Ürün Listesi <span class="muted" style="font-weight:500;">({{ urunler|length }})</span></h3>
+        <form method="get" class="flex" style="gap:8px;">
+            <input class="input btn-sm" style="width:240px;" type="text" name="q" value="{{ q }}" placeholder="🔍 Ürün ara...">
+            <button class="btn btn-ghost btn-sm" type="submit">Ara</button>
+            {% if q %}<a href="{{ url_for('products.list') }}" class="btn btn-ghost btn-sm">✕</a>{% endif %}
+        </form>
+    </div>
+
+    {% if urunler %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>#</th><th>Ürün Adı</th><th>Kategori</th><th>Açıklama</th>
+                    <th class="right">Birim Fiyat</th><th class="right">Stok</th><th class="right">İşlem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in urunler %}
+                <tr>
+                    <td class="muted">{{ u.id }}</td>
+                    <td><strong>{{ u.name }}</strong></td>
+                    <td class="muted" style="font-size:.84rem;">{{ u.kategori or '—' }}</td>
+                    <td class="muted">{{ u.aciklama or '—' }}</td>
+                    <td class="right">{{ "%.2f"|format(u.birim_fiyat or 0) }} ₺</td>
+                    <td class="right">
+                        {% if (u.stok or 0) <= 5 %}
+                            <span class="badge badge-red">{{ u.stok or 0 }}</span>
+                        {% else %}
+                            <span class="badge badge-green">{{ u.stok }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="right">
+                        <div class="flex" style="justify-content:flex-end; gap:6px;">
+                            <a href="{{ url_for('products.stok_hareket', pid=u.id) }}" class="btn btn-ghost btn-sm" title="Stok Hareketleri">📦</a>
+                            <a href="{{ url_for('products.edit', pid=u.id) }}" class="btn btn-ghost btn-sm">Düzenle</a>
+                            <form method="post" action="{{ url_for('products.delete', pid=u.id) }}"
+                                  data-confirm=""{{ u.name }}" ürününü silmek istediğinize emin misiniz?">
+                                <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">📦</div>
+        <p>{{ 'Aramanıza uygun ürün bulunamadı.' if q else 'Henüz ürün eklenmemiş.' }}</p>
+        <a href="{{ url_for('products.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">İlk ürünü ekle</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

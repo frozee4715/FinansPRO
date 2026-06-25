@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% set active = 'reports' %}
+{% block title %}Nakit Akışı Tahmini{% endblock %}
+{% block heading %}Nakit Akışı Tahmini{% endblock %}
+{% block crumb %}Önümüzdeki 90 günlük tahmini gelir ve gider{% endblock %}
+
+{% block content %}
+
+{% if forecast %}
+{% set toplam_gelir = forecast|sum(attribute='gelir') %}
+{% set toplam_gider = forecast|sum(attribute='gider') %}
+{% set toplam_net   = forecast|sum(attribute='net') %}
+{% set pozitif_ay   = forecast|selectattr('net','ge',0)|list|length %}
+{% else %}
+{% set toplam_gelir = 0 %}
+{% set toplam_gider = 0 %}
+{% set toplam_net   = 0 %}
+{% set pozitif_ay   = 0 %}
+{% endif %}
+
+<!-- KPI şeridi -->
+<div class="nk-kpi-row">
+    <div class="nk-kpi">
+        <div class="nk-kpi-ico" style="background:#10b98118; color:#10b981;">📈</div>
+        <div>
+            <div class="nk-kpi-lbl">Toplam Tahmini Gelir</div>
+            <div class="nk-kpi-val" style="color:var(--success);">+{{ "%.0f"|format(toplam_gelir) }} {{ CURRENCY }}</div>
+        </div>
+    </div>
+    <div class="nk-kpi">
+        <div class="nk-kpi-ico" style="background:#ef444418; color:#ef4444;">📉</div>
+        <div>
+            <div class="nk-kpi-lbl">Toplam Tahmini Gider</div>
+            <div class="nk-kpi-val" style="color:var(--danger);">-{{ "%.0f"|format(toplam_gider) }} {{ CURRENCY }}</div>
+        </div>
+    </div>
+    <div class="nk-kpi {{ 'nk-kpi-pos' if toplam_net >= 0 else 'nk-kpi-neg' }}">
+        <div class="nk-kpi-ico" style="background:{{ 'var(--success)' if toplam_net >= 0 else 'var(--danger)' }}18; color:{{ 'var(--success)' if toplam_net >= 0 else 'var(--danger)' }};">💰</div>
+        <div>
+            <div class="nk-kpi-lbl">Net Nakit Akışı</div>
+            <div class="nk-kpi-val" style="color:{{ 'var(--success)' if toplam_net >= 0 else 'var(--danger)' }};">
+                {{ '+' if toplam_net >= 0 else '' }}{{ "%.0f"|format(toplam_net) }} {{ CURRENCY }}
+            </div>
+        </div>
+    </div>
+    <div class="nk-kpi">
+        <div class="nk-kpi-ico" style="background:var(--primary)18; color:var(--primary);">📅</div>
+        <div>
+            <div class="nk-kpi-lbl">Pozitif Ay Sayısı</div>
+            <div class="nk-kpi-val">{{ pozitif_ay }} / {{ forecast|length if forecast else 0 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="nk-grid">
+
+    <!-- Grafik -->
+    <div class="card">
+        <div class="card-head">
+            <h3>Aylık Nakit Akışı</h3>
+            <span class="badge badge-blue">90 Günlük Tahmin</span>
+        </div>
+        <div class="card-pad">
+            {% if forecast %}
+            <canvas id="nkChart" height="240"></canvas>
+            {% else %}
+            <div class="empty"><div class="big">📊</div><p>Tahmin için veri bulunamadı.</p></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Ay ay özet -->
+    <div class="card">
+        <div class="card-head"><h3>Aylık Özet</h3></div>
+        {% if forecast %}
+        <div class="card-pad" style="display:flex; flex-direction:column; gap:10px;">
+            {% for row in forecast %}
+            {% set net = row.net %}
+            <div class="nk-month-row">
+                <div class="nk-month-dot" style="background:{{ 'var(--success)' if net >= 0 else 'var(--danger)' }};"></div>
+                <div style="flex:1; min-width:0;">
+                    <div style="font-weight:600; font-size:.88rem;">{{ row.ay }}</div>
+                    <div style="display:flex; gap:12px; font-size:.78rem; color:var(--muted); margin-top:2px;">
+                        <span style="color:var(--success);">+{{ "%.0f"|format(row.gelir) }}</span>
+                        <span style="color:var(--danger);">-{{ "%.0f"|format(row.gider) }}</span>
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-weight:700; font-size:.9rem; color:{{ 'var(--success)' if net >= 0 else 'var(--danger)' }};">
+                        {{ '+' if net >= 0 else '' }}{{ "%.0f"|format(net) }} {{ CURRENCY }}
+                    </div>
+                    <span class="badge {{ 'badge-green' if net >= 0 else 'badge-red' }}" style="font-size:.7rem;">
+                        {{ 'Pozitif' if net >= 0 else 'Negatif' }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty"><div class="big">📅</div><p>Veri bulunamadı.</p></div>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- Detay tablosu -->
+{% if forecast %}
+<div class="card" style="margin-top:16px;">
+    <div class="card-head"><h3>Detaylı Tablo</h3></div>
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Ay</th>
+                    <th class="right">Tahmini Gelir</th>
+                    <th class="right">Tahmini Gider</th>
+                    <th class="right">Net Akış</th>
+                    <th class="right">Kümülatif</th>
+                    <th>Durum</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set ns = namespace(kumulatif=0) %}
+                {% for row in forecast %}
+                {% set ns.kumulatif = ns.kumulatif + row.net %}
+                <tr>
+                    <td><strong>{{ row.ay }}</strong></td>
+                    <td class="right" style="color:var(--success);">+{{ "%.2f"|format(row.gelir) }} {{ CURRENCY }}</td>
+                    <td class="right" style="color:var(--danger);">-{{ "%.2f"|format(row.gider) }} {{ CURRENCY }}</td>
+                    <td class="right">
+                        <strong style="color:{{ 'var(--success)' if row.net >= 0 else 'var(--danger)' }};">
+                            {{ '+' if row.net >= 0 else '' }}{{ "%.2f"|format(row.net) }} {{ CURRENCY }}
+                        </strong>
+                    </td>
+                    <td class="right" style="color:{{ 'var(--success)' if ns.kumulatif >= 0 else 'var(--danger)' }}; font-size:.85rem;">
+                        {{ '+' if ns.kumulatif >= 0 else '' }}{{ "%.0f"|format(ns.kumulatif) }} {{ CURRENCY }}
+                    </td>
+                    <td>
+                        <span class="badge {{ 'badge-green' if row.net >= 0 else 'badge-red' }}">
+                            {{ '✅ Pozitif' if row.net >= 0 else '⚠️ Negatif' }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight:800;">
+                    <td>TOPLAM</td>
+                    <td class="right" style="color:var(--success);">+{{ "%.2f"|format(toplam_gelir) }} {{ CURRENCY }}</td>
+                    <td class="right" style="color:var(--danger);">-{{ "%.2f"|format(toplam_gider) }} {{ CURRENCY }}</td>
+                    <td class="right" style="color:{{ 'var(--success)' if toplam_net >= 0 else 'var(--danger)' }};">
+                        {{ '+' if toplam_net >= 0 else '' }}{{ "%.2f"|format(toplam_net) }} {{ CURRENCY }}
+                    </td>
+                    <td></td><td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if forecast %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var grid = isDark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.06)';
+    var txt  = isDark ? '#94a3b8' : '#64748b';
+    new Chart(document.getElementById('nkChart'), {
+        type: 'bar',
+        data: {
+            labels: [{% for r in forecast %}'{{ r.ay }}'{{ ',' if not loop.last }}{% endfor %}],
+            datasets: [
+                { label:'Gelir', data:[{% for r in forecast %}{{ r.gelir }}{{ ',' if not loop.last }}{% endfor %}],
+                  backgroundColor:'rgba(16,185,129,.75)', borderRadius:6 },
+                { label:'Gider', data:[{% for r in forecast %}{{ r.gider }}{{ ',' if not loop.last }}{% endfor %}],
+                  backgroundColor:'rgba(239,68,68,.6)', borderRadius:6 },
+                { label:'Net', data:[{% for r in forecast %}{{ r.net }}{{ ',' if not loop.last }}{% endfor %}],
+                  type:'line', borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,.12)',
+                  pointBackgroundColor:'#6366f1', tension:.35, fill:true, borderWidth:2 }
+            ]
+        },
+        options:{
+            responsive:true,
+            plugins:{ legend:{ labels:{ color:txt } } },
+            scales:{
+                x:{ ticks:{ color:txt }, grid:{ color:grid } },
+                y:{ ticks:{ color:txt }, grid:{ color:grid } }
+            }
+        }
+    });
+}());
+</script>
+{% endif %}
+<style>
+.nk-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+@media(max-width:900px){ .nk-kpi-row{ grid-template-columns:repeat(2,1fr); } }
+.nk-kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; display:flex; align-items:center; gap:14px; }
+.nk-kpi-ico { width:44px; height:44px; border-radius:var(--radius-sm); display:grid; place-items:center; font-size:1.3rem; flex-shrink:0; }
+.nk-kpi-lbl { font-size:.75rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+.nk-kpi-val { font-size:1.1rem; font-weight:800; margin-top:2px; }
+
+.nk-grid { display:grid; grid-template-columns:1.6fr 1fr; gap:16px; }
+@media(max-width:900px){ .nk-grid{ grid-template-columns:1fr; } }
+
+.nk-month-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+.nk-month-row:last-child { border-bottom:none; }
+.nk-month-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+</style>
+{% endblock %}

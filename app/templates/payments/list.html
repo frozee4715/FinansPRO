@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% set active = 'payments' %}
+{% block title %}Ödemeler{% endblock %}
+{% block heading %}Ödemeler{% endblock %}
+{% block crumb %}Tahsilat ve ödeme kayıtları{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('payments.create') }}" class="btn btn-primary btn-sm">＋ Yeni Ödeme</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-head">
+        <h3>Ödeme Listesi <span class="muted" style="font-weight:500;">({{ odemeler|length }})</span></h3>
+    </div>
+
+    {% if odemeler %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr><th>#</th><th>Fatura No</th><th>Müşteri</th><th>Tarih</th><th>Tip</th>
+                    <th class="right">Tutar</th><th class="right">İşlem</th></tr>
+            </thead>
+            <tbody>
+                {% for o in odemeler %}
+                <tr>
+                    <td class="muted">{{ o.id }}</td>
+                    <td><strong>{{ o.fatura_no or '—' }}</strong></td>
+                    <td>{{ o.musteri_unvan or '—' }}</td>
+                    <td class="muted">{{ o.odeme_tarihi or '—' }}</td>
+                    <td><span class="badge badge-gray">{{ o.odeme_tipi or '—' }}</span></td>
+                    <td class="right"><strong style="color:var(--success);">{{ "%.2f"|format(o.tutar or 0) }} ₺</strong></td>
+                    <td class="right">
+                        <form method="post" action="{{ url_for('payments.delete', pid=o.id) }}" style="display:inline;"
+                              data-confirm="Bu ödemeyi silmek istediğinize emin misiniz?">
+                            <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">💳</div>
+        <p>Henüz ödeme kaydı yok.</p>
+        <a href="{{ url_for('payments.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">İlk ödemeyi kaydet</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

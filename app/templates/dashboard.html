@@ -1,0 +1,360 @@
+{% extends 'base.html' %}
+{% set active = 'dashboard' %}
+{% block title %}Gösterge Paneli{% endblock %}
+{% block heading %}Gösterge Paneli{% endblock %}
+{% block crumb %}Hoş geldiniz, <strong>{{ current_user.name }}</strong>{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('exports.muhasebe_csv') }}" class="btn btn-ghost btn-sm">⬇️ CSV</a>
+    <a href="{{ url_for('invoices.create') }}" class="btn btn-primary btn-sm">＋ Yeni Fatura</a>
+{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+{# ── Uyarılar ───────────────────────────────────────────────────── #}
+{% if uyarilar %}
+<div class="alert-list">
+    {% for u in uyarilar %}
+    <a href="{{ u.url }}" class="alert-item {% if u.tip=='danger' %}alert-danger{% elif u.tip=='warning' %}alert-warning{% else %}alert-info{% endif %}">
+        <span class="alert-item-ico">{{ u.ikon }}</span>
+        <span class="alert-item-msg">{{ u.mesaj }}</span>
+        <span class="alert-item-cta">Görüntüle →</span>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Karşılama ──────────────────────────────────────────────────── #}
+<div class="dash-welcome">
+    <div class="dw-left">
+        <div class="dw-eyebrow">İşletme Özeti</div>
+        <div class="dw-title">Merhaba, {{ current_user.name }} 👋</div>
+        <div class="dw-sub">İşletmenizin anlık durumu aşağıda özetlenmiştir.</div>
+        <div class="dw-btns">
+            <a href="{{ url_for('invoices.create') }}" class="dw-btn-solid">＋ Yeni Fatura</a>
+            <a href="{{ url_for('customers.create') }}" class="dw-btn-ghost">🤝 Müşteri Ekle</a>
+        </div>
+    </div>
+    <div class="dw-right">
+        <div class="dw-kpi"><span class="dw-kpi-val">{{ stats.fatura }}</span><span class="dw-kpi-lbl">Fatura</span></div>
+        <div class="dw-kpi"><span class="dw-kpi-val">{{ stats.musteri }}</span><span class="dw-kpi-lbl">Müşteri</span></div>
+        <div class="dw-kpi"><span class="dw-kpi-val">{{ stats.urun }}</span><span class="dw-kpi-lbl">Ürün</span></div>
+    </div>
+</div>
+
+{# ── 4 KPI — filtre ile ─────────────────────────────────────────── #}
+{% set alacak = (stats.ciro - stats.tahsilat) if stats.ciro > stats.tahsilat else 0 %}
+<div class="db-kpi-row">
+    <div class="db-kpi-head">
+        <span class="db-kpi-label">
+            {% if start or end %}📅 {{ start or '…' }} → {{ end or '…' }}{% else %}Tüm zamanlar{% endif %}
+        </span>
+        <form method="get" class="db-kpi-filter">
+            <input class="input" type="date" name="start" value="{{ start }}" placeholder="Başlangıç">
+            <input class="input" type="date" name="end"   value="{{ end }}"   placeholder="Bitiş">
+            <button class="btn btn-ghost btn-sm" type="submit">Filtrele</button>
+            {% if start or end %}<a href="{{ url_for('main.dashboard') }}" class="btn btn-ghost btn-sm">✕</a>{% endif %}
+        </form>
+    </div>
+    <div class="kpi-grid">
+        <div class="kpi-card kpi-green">
+            <div class="kpi-header"><div class="kpi-ico ic-green">📈</div><span class="kpi-badge up">Gelir</span></div>
+            <div class="kpi-val">{{ "%.0f"|format(ie.gelir) }} ₺</div>
+            <div class="kpi-lbl">Satış Geliri</div>
+        </div>
+        <div class="kpi-card kpi-red">
+            <div class="kpi-header"><div class="kpi-ico ic-red">💸</div><span class="kpi-badge down">Gider</span></div>
+            <div class="kpi-val">{{ "%.0f"|format(ie.gider + ie.alis) }} ₺</div>
+            <div class="kpi-lbl">Toplam Gider + Alış</div>
+        </div>
+        <div class="kpi-card {% if ie.kar >= 0 %}kpi-blue{% else %}kpi-red{% endif %}">
+            <div class="kpi-header">
+                <div class="kpi-ico {% if ie.kar >= 0 %}ic-blue{% else %}ic-red{% endif %}">🧮</div>
+                <span class="kpi-badge {% if ie.kar >= 0 %}up{% else %}down{% endif %}">{% if ie.kar >= 0 %}Kâr{% else %}Zarar{% endif %}</span>
+            </div>
+            <div class="kpi-val" style="color:{{ 'var(--success)' if ie.kar >= 0 else 'var(--danger)' }};">{{ "%.0f"|format(ie.kar) }} ₺</div>
+            <div class="kpi-lbl">Tahmini Net Kâr</div>
+        </div>
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-header">
+                <div class="kpi-ico ic-amber">⏳</div>
+                <span class="kpi-badge {% if alacak > 0 %}down{% else %}up{% endif %}">{% if alacak > 0 %}Bekliyor{% else %}Tamam{% endif %}</span>
+            </div>
+            <div class="kpi-val">{{ "%.0f"|format(alacak) }} ₺</div>
+            <div class="kpi-lbl">Tahsil Edilmemiş Alacak</div>
+        </div>
+    </div>
+</div>
+
+{# ── Grafik + Sağ panel ─────────────────────────────────────────── #}
+<div class="dash-mid">
+
+    <div class="card">
+        <div class="card-head"><h3>📈 Aylık Ciro</h3><span class="chart-badge">Son 6 Ay</span></div>
+        <div class="card-pad">
+            {% if aylik %}<canvas id="cAylik" height="115"></canvas>
+            {% else %}
+            <div class="empty" style="padding:40px 20px;">
+                <div class="big">📈</div><p>Henüz satış verisi yok.</p>
+                <a href="{{ url_for('invoices.create') }}" class="btn btn-primary btn-sm" style="margin-top:12px;">İlk faturayı oluştur</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        {# KDV özeti #}
+        <div class="card">
+            <div class="card-head"><h3>🧾 KDV Özeti</h3></div>
+            <div class="card-pad" style="padding-top:14px; padding-bottom:14px;">
+                <div class="kdv-row"><span class="muted">Hesaplanan KDV</span><strong>{{ "%.2f"|format(kdv.hesaplanan) }} ₺</strong></div>
+                <div class="kdv-row"><span class="muted">İndirilecek KDV</span><strong>{{ "%.2f"|format(kdv.indirilecek) }} ₺</strong></div>
+                <div class="kdv-row kdv-total">
+                    <span style="font-weight:700;">Ödenecek KDV</span>
+                    <strong class="kdv-amount {% if kdv.odenecek > 0 %}kdv-danger{% else %}kdv-ok{% endif %}">{{ "%.2f"|format(kdv.odenecek) }} ₺</strong>
+                </div>
+            </div>
+        </div>
+
+        {# Hızlı işlemler #}
+        <div class="card">
+            <div class="card-head"><h3>⚡ Hızlı İşlemler</h3></div>
+            <div class="card-pad" style="padding-top:12px; padding-bottom:12px;">
+                <div class="quick-grid">
+                    <a href="{{ url_for('invoices.create') }}" class="quick-btn"><div class="quick-btn-ico ic-blue">🧾</div><span>Fatura</span></a>
+                    <a href="{{ url_for('customers.create') }}" class="quick-btn"><div class="quick-btn-ico ic-green">🤝</div><span>Müşteri</span></a>
+                    <a href="{{ url_for('products.create') }}" class="quick-btn"><div class="quick-btn-ico ic-amber">📦</div><span>Ürün</span></a>
+                    <a href="{{ url_for('expenses.create') }}" class="quick-btn"><div class="quick-btn-ico ic-red">💸</div><span>Gider</span></a>
+                    <a href="{{ url_for('payments.create') }}" class="quick-btn"><div class="quick-btn-ico ic-sky">💳</div><span>Ödeme</span></a>
+                    <a href="{{ url_for('checks.create') }}" class="quick-btn"><div class="quick-btn-ico ic-blue">🧾</div><span>Çek/Senet</span></a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{# ── Son faturalar + En iyi müşteriler + En çok satan ──────────── #}
+<div class="dash-bot">
+
+    <div class="card">
+        <div class="card-head">
+            <h3>🕒 Son Faturalar</h3>
+            <a href="{{ url_for('invoices.list') }}" class="btn btn-ghost btn-sm">Tümü →</a>
+        </div>
+        {% if son_faturalar %}
+        <div class="table-wrap">
+            <table class="data">
+                <thead><tr><th>Fatura No</th><th>Müşteri</th><th>Tarih</th><th>Tip</th><th class="right">Tutar</th></tr></thead>
+                <tbody>
+                    {% for f in son_faturalar %}
+                    <tr>
+                        <td><strong>{{ f.fatura_no }}</strong></td>
+                        <td>{{ f.musteri_unvan or '—' }}</td>
+                        <td class="muted">{{ f.tarih or '—' }}</td>
+                        <td>{% if f.fatura_tipi=='Satış' %}<span class="badge badge-blue">Satış</span>{% else %}<span class="badge badge-amber">Alış</span>{% endif %}</td>
+                        <td class="right"><strong>{{ "%.2f"|format(f.toplam_tutar or 0) }} ₺</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty"><div class="big">🧾</div><p>Henüz fatura yok.</p>
+            <a href="{{ url_for('invoices.create') }}" class="btn btn-primary btn-sm" style="margin-top:12px;">İlk faturayı oluştur</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <div class="card">
+            <div class="card-head"><h3>🏆 En İyi Müşteriler</h3><a href="{{ url_for('customers.list') }}" class="btn btn-ghost btn-sm">Tümü →</a></div>
+            <div class="card-pad" style="padding-top:12px; padding-bottom:12px;">
+                {% if top %}
+                {% set mx = top[0].toplam if top[0].toplam > 0 else 1 %}
+                <div class="top-cust">
+                    {% for t in top %}
+                    <div class="top-cust-row">
+                        <div class="tc-rank {% if loop.index==1 %}gold{% elif loop.index==2 %}silver{% elif loop.index==3 %}bronze{% endif %}">{{ loop.index }}</div>
+                        <div class="tc-info">
+                            <div class="tc-name">{{ t.unvan }}</div>
+                            <div class="tc-bar-wrap" style="margin-top:4px;"><div class="tc-bar" style="width:{{ (t.toplam/mx*100)|int }}%;"></div></div>
+                        </div>
+                        <div class="tc-amount">{{ "%.0f"|format(t.toplam) }} ₺</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}<div class="empty" style="padding:24px;"><div class="big">🏆</div><p>Veri yok.</p></div>{% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>📦 En Çok Satan</h3></div>
+            <div class="card-pad" style="padding-top:12px; padding-bottom:12px;">
+                {% if top_urun %}
+                <div class="top-cust">
+                    {% for t in top_urun[:4] %}
+                    <div class="top-cust-row">
+                        <div class="tc-rank {% if loop.index==1 %}gold{% elif loop.index==2 %}silver{% elif loop.index==3 %}bronze{% endif %}">{{ loop.index }}</div>
+                        <div class="tc-info">
+                            <div class="tc-name">{{ t.urun_kodu }}</div>
+                            <div class="muted" style="font-size:.74rem; margin-top:2px;">{{ t.adet }} adet</div>
+                        </div>
+                        <div class="tc-amount">{{ "%.0f"|format(t.toplam) }} ₺</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}<div class="empty" style="padding:24px;"><div class="big">📦</div><p>Veri yok.</p></div>{% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{# ── Detaylı Raporlar ───────────────────────────────────────────── #}
+<div class="rpt-grid" style="margin-top:22px;">
+    <a href="{{ url_for('reports.bilanco') }}" class="rpt-card">
+        <span class="rpt-card-ico">🏛️</span>
+        <div class="rpt-card-title">Bilanço</div>
+        <div class="rpt-card-sub">Aktif / Pasif özet</div>
+    </a>
+    <a href="{{ url_for('reports.nakit_akisi') }}" class="rpt-card">
+        <span class="rpt-card-ico">💧</span>
+        <div class="rpt-card-title">Nakit Akışı</div>
+        <div class="rpt-card-sub">90 günlük tahmin</div>
+    </a>
+    <a href="{{ url_for('reports.karsilastirma') }}" class="rpt-card">
+        <span class="rpt-card-ico">📊</span>
+        <div class="rpt-card-title">Dönem Karşılaştırma</div>
+        <div class="rpt-card-sub">Bu ay / geçen ay</div>
+    </a>
+    <a href="{{ url_for('reports.musteri_karlilik') }}" class="rpt-card">
+        <span class="rpt-card-ico">👑</span>
+        <div class="rpt-card-title">Müşteri Karlılığı</div>
+        <div class="rpt-card-sub">Ciro & tahsilat analizi</div>
+    </a>
+    <a href="{{ url_for('reports.denetim_kaydi') }}" class="rpt-card">
+        <span class="rpt-card-ico">🔍</span>
+        <div class="rpt-card-title">Denetim Kaydı</div>
+        <div class="rpt-card-sub">Kim ne zaman ne yaptı</div>
+    </a>
+    <a href="{{ url_for('exports.suppliers_csv') }}" class="rpt-card">
+        <span class="rpt-card-ico">📤</span>
+        <div class="rpt-card-title">Tedarikçi CSV</div>
+        <div class="rpt-card-sub">Tedarikçi listesi dışa aktar</div>
+    </a>
+</div>
+
+{# ── Pro Widget ─────────────────────────────────────────────────── #}
+{% if is_pro %}
+<div class="dash-section">
+    <div class="dash-section-head">
+        <h2 class="dash-section-title">✨ Pro Özellikler</h2>
+        <span class="pro-badge" style="font-size:.75rem; padding:4px 12px;">AKTİF</span>
+    </div>
+    <div class="pro-dash-grid">
+        <a href="{{ url_for('ai.chat') }}" class="pro-dash-card pro-dash-ai">
+            <div class="pdc-ico">🤖</div>
+            <div class="pdc-body">
+                <div class="pdc-title">AI Finansal Asistan</div>
+                <div class="pdc-sub">Faturalarınızı, gelirinizi ve giderlerinizi yapay zeka ile analiz edin.</div>
+            </div>
+            <span class="pdc-arrow">→</span>
+        </a>
+        <a href="{{ url_for('settings.kisisellestir') }}" class="pro-dash-card">
+            <div class="pdc-ico">🎨</div>
+            <div class="pdc-body"><div class="pdc-title">Kişiselleştirme</div><div class="pdc-sub">Marka rengi ve tema ayarları.</div></div>
+            <span class="pdc-arrow">→</span>
+        </a>
+        <a href="{{ url_for('backup.index') }}" class="pro-dash-card">
+            <div class="pdc-ico">☁️</div>
+            <div class="pdc-body"><div class="pdc-title">Yedekleme</div><div class="pdc-sub">Güvenli yedek ve geri yükleme.</div></div>
+            <span class="pdc-arrow">→</span>
+        </a>
+        <a href="{{ url_for('destek.index') }}" class="pro-dash-card">
+            <div class="pdc-ico">⚡</div>
+            <div class="pdc-body"><div class="pdc-title">Öncelikli Destek</div><div class="pdc-sub">Pro'ya özel hızlı teknik destek.</div></div>
+            <span class="pdc-arrow">→</span>
+        </a>
+    </div>
+</div>
+{% else %}
+<div class="dash-upgrade" style="margin-top:22px;">
+    <div class="du-bg"></div>
+    <div class="du-left">
+        <div class="du-badge">✨ PRO SÜRÜM</div>
+        <h2 class="du-title">İşletmenizi bir üst seviyeye taşıyın</h2>
+        <p class="du-sub">AI Asistan, gelişmiş raporlar, otomatik yedekleme ve daha fazlası sizi bekliyor.</p>
+        <div class="du-features">
+            <span class="du-feat"><span class="du-check">✓</span> 🤖 AI Finansal Asistan</span>
+            <span class="du-feat"><span class="du-check">✓</span> ☁️ Otomatik Yedekleme</span>
+            <span class="du-feat"><span class="du-check">✓</span> 🎨 Marka Kişiselleştirme</span>
+            <span class="du-feat"><span class="du-check">✓</span> ⚡ Öncelikli Destek</span>
+        </div>
+        <a href="{{ url_for('billing.upgrade') }}" class="du-btn">🚀 Pro'ya Geç →</a>
+    </div>
+    <div class="du-right">
+        <div class="du-card-preview">
+            <div class="dcp-header"><span>🤖 AI Finansal Asistan</span><span class="pro-badge" style="font-size:.65rem;">PRO</span></div>
+            <div class="dcp-msg dcp-ai">Bu ayki geliriniz geçen aya göre %12 arttı. ABC Ltd'den 3.200 ₺ alacağınız var, takibe almanızı öneririm.</div>
+            <div class="dcp-input"><span>Finansal durumum nasıl?</span><span class="dcp-send">→</span></div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const grid  = isDark ? 'rgba(255,255,255,.07)' : 'rgba(76,29,149,.07)';
+    const tick  = isDark ? 'rgba(255,255,255,.45)' : 'rgba(70,63,92,.65)';
+    const tbg   = isDark ? '#1a1828' : '#fff';
+    const ttxt  = isDark ? '#ece9f7' : '#1e1b2e';
+    const tsub  = isDark ? '#9a93b5' : '#6b6580';
+    const tbrd  = isDark ? '#2c2942' : '#eae6f5';
+
+    {% if aylik %}
+    const el = document.getElementById('cAylik');
+    if (el) new Chart(el, {
+        type: 'bar',
+        data: {
+            labels: {{ aylik|map(attribute='ay')|list|tojson }},
+            datasets: [{
+                label: 'Ciro (₺)',
+                data: {{ aylik|map(attribute='tutar')|list|tojson }},
+                backgroundColor: function(c) {
+                    var ca = c.chart.chartArea;
+                    if (!ca) return 'rgba(124,58,237,.85)';
+                    var g = c.chart.ctx.createLinearGradient(0, ca.bottom, 0, ca.top);
+                    g.addColorStop(0, 'rgba(124,58,237,.80)');
+                    g.addColorStop(1, 'rgba(236,72,153,.85)');
+                    return g;
+                },
+                borderRadius: 10, borderSkipped: false, maxBarThickness: 48
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: tbg, titleColor: ttxt, bodyColor: tsub, borderColor: tbrd, borderWidth: 1, padding: 12,
+                    callbacks: { label: c => ' ' + c.raw.toLocaleString('tr-TR') + ' ₺' } }
+            },
+            scales: {
+                y: { beginAtZero: true, grid: { color: grid }, ticks: { color: tick, font: { size: 11, weight: '600' } } },
+                x: { grid: { display: false }, ticks: { color: tick, font: { size: 11, weight: '600' } } }
+            },
+            animation: { duration: 800, easing: 'easeOutQuart' }
+        }
+    });
+    {% endif %}
+})();
+</script>
+{% endblock %}

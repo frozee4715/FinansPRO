@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% set active = 'suppliers' %}
+{% block title %}Tedarikçiler{% endblock %}
+{% block heading %}Tedarikçiler{% endblock %}
+{% block crumb %}Tedarikçi cari yönetimi{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('suppliers.create') }}" class="btn btn-primary btn-sm">＋ Yeni Tedarikçi</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-head">
+        <h3>Tedarikçi Listesi <span class="muted" style="font-weight:500;">({{ tedarikciler|length }})</span></h3>
+        <form method="get" class="flex" style="gap:8px;">
+            <input class="input btn-sm" style="width:260px;" type="text" name="q"
+                   value="{{ q }}" placeholder="🔍 Ünvan, vergi no, e-posta...">
+            <button class="btn btn-ghost btn-sm" type="submit">Ara</button>
+            {% if q %}
+                <a href="{{ url_for('suppliers.list') }}" class="btn btn-ghost btn-sm">✕</a>
+            {% endif %}
+        </form>
+    </div>
+
+    {% if tedarikciler %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Ünvan</th>
+                    <th>Vergi / TC No</th>
+                    <th>Telefon</th>
+                    <th>E-posta</th>
+                    <th class="right">İşlem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in tedarikciler %}
+                <tr>
+                    <td class="muted">{{ t.id }}</td>
+                    <td>
+                        <strong>{{ t.unvan }}</strong><br>
+                        <span class="muted" style="font-size:.82rem;">{{ t.adres or '' }}</span>
+                    </td>
+                    <td class="muted">{{ t.vergi_no or '—' }}</td>
+                    <td class="muted">{{ t.telefon or '—' }}</td>
+                    <td class="muted">{{ t.eposta or '—' }}</td>
+                    <td class="right">
+                        <div class="flex" style="justify-content:flex-end; gap:6px;">
+                            <a href="{{ url_for('suppliers.edit', sid=t.id) }}" class="btn btn-ghost btn-sm">Düzenle</a>
+                            <form method="post" action="{{ url_for('suppliers.delete', sid=t.id) }}"
+                                  data-confirm=""{{ t.unvan }}" tedarikçisini silmek istediğinize emin misiniz?">
+                                <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">🏭</div>
+        <p>{{ 'Aramanıza uygun tedarikçi bulunamadı.' if q else 'Henüz tedarikçi eklenmemiş.' }}</p>
+        <a href="{{ url_for('suppliers.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">
+            İlk tedarikçiyi ekle
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

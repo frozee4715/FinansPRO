@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% set active = 'reports' %}
+{% block title %}Müşteri Karlılığı{% endblock %}
+{% block heading %}Müşteri Karlılığı{% endblock %}
+{% block crumb %}Ciro · Tahsilat · Açık Bakiye{% endblock %}
+
+{% block content %}
+
+{% if musteriler %}
+{% set toplam_ciro   = musteriler|sum(attribute='ciro') %}
+{% set toplam_odenen = musteriler|sum(attribute='odenen') %}
+{% set toplam_kalan  = musteriler|sum(attribute='kalan') %}
+{% set toplam_fatura = musteriler|sum(attribute='fatura_sayisi') %}
+{% else %}
+{% set toplam_ciro = 0 %}{% set toplam_odenen = 0 %}{% set toplam_kalan = 0 %}{% set toplam_fatura = 0 %}
+{% endif %}
+
+<!-- KPI şeridi -->
+<div class="mk-kpi-row">
+    <div class="mk-kpi">
+        <div class="mk-kpi-ico" style="background:var(--primary)18; color:var(--primary);">👑</div>
+        <div><div class="mk-kpi-lbl">Toplam Ciro</div><div class="mk-kpi-val">{{ "%.0f"|format(toplam_ciro) }} {{ CURRENCY }}</div></div>
+    </div>
+    <div class="mk-kpi">
+        <div class="mk-kpi-ico" style="background:#10b98118; color:#10b981;">✅</div>
+        <div><div class="mk-kpi-lbl">Tahsil Edilen</div><div class="mk-kpi-val" style="color:var(--success);">{{ "%.0f"|format(toplam_odenen) }} {{ CURRENCY }}</div></div>
+    </div>
+    <div class="mk-kpi">
+        <div class="mk-kpi-ico" style="background:#ef444418; color:#ef4444;">⏳</div>
+        <div><div class="mk-kpi-lbl">Açık Bakiye</div><div class="mk-kpi-val" style="color:var(--danger);">{{ "%.0f"|format(toplam_kalan) }} {{ CURRENCY }}</div></div>
+    </div>
+    <div class="mk-kpi">
+        <div class="mk-kpi-ico" style="background:#6366f118; color:#6366f1;">🤝</div>
+        <div><div class="mk-kpi-lbl">Müşteri Sayısı</div><div class="mk-kpi-val">{{ musteriler|length }}</div></div>
+    </div>
+</div>
+
+{% if musteriler %}
+
+<!-- Top 3 spotlight -->
+<div class="mk-top3-grid">
+    {% for m in musteriler[:3] %}
+    {% set pct = ((m.odenen / m.ciro * 100)|int) if m.ciro > 0 else 0 %}
+    {% set medals = ['🥇', '🥈', '🥉'] %}
+    <div class="mk-top3-card {{ 'mk-top3-gold' if loop.index == 1 }}">
+        <div class="mk-top3-medal">{{ medals[loop.index0] }}</div>
+        <div class="mk-top3-avatar">{{ m.unvan[0]|upper }}</div>
+        <div class="mk-top3-name">{{ m.unvan }}</div>
+        <div class="mk-top3-ciro">{{ "%.0f"|format(m.ciro) }} {{ CURRENCY }}</div>
+        <div class="mk-top3-bar-wrap">
+            <div class="mk-top3-bar" style="width:{{ pct }}%; background:{{ 'var(--success)' if pct >= 80 else ('var(--warning)' if pct >= 50 else 'var(--danger)') }};"></div>
+        </div>
+        <div class="muted" style="font-size:.75rem;">%{{ pct }} tahsilat · {{ m.fatura_sayisi }} fatura</div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Grafik + tablo -->
+<div class="mk-main-grid">
+
+    <div class="card">
+        <div class="card-head"><h3>Ciro Karşılaştırması</h3><span class="badge badge-blue">{{ musteriler|length }} müşteri</span></div>
+        <div class="card-pad"><canvas id="mkChart" height="280"></canvas></div>
+    </div>
+
+    <div class="card">
+        <div class="card-head"><h3>Tahsilat Oranları</h3></div>
+        <div class="card-pad" style="display:flex; flex-direction:column; gap:10px;">
+            {% for m in musteriler[:8] %}
+            {% set pct = ((m.odenen / m.ciro * 100)|int) if m.ciro > 0 else 0 %}
+            <div>
+                <div style="display:flex; justify-content:space-between; font-size:.82rem; margin-bottom:4px;">
+                    <span style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;">{{ m.unvan }}</span>
+                    <span style="color:{{ 'var(--success)' if pct >= 80 else ('var(--warning)' if pct >= 50 else 'var(--danger)') }}; font-weight:700;">%{{ pct }}</span>
+                </div>
+                <div style="height:6px; background:var(--border); border-radius:999px;">
+                    <div style="height:100%; width:{{ pct }}%; border-radius:999px; background:{{ 'var(--success)' if pct >= 80 else ('var(--warning)' if pct >= 50 else 'var(--danger)') }}; transition:width .6s;"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Tam tablo -->
+<div class="card" style="margin-top:16px;">
+    <div class="card-head"><h3>Tüm Müşteriler</h3></div>
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th style="width:36px;">#</th>
+                    <th>Müşteri</th>
+                    <th class="right">Toplam Ciro</th>
+                    <th class="right">Tahsil Edilen</th>
+                    <th class="right">Açık Bakiye</th>
+                    <th class="right">Fatura</th>
+                    <th class="right">Tahsilat %</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set max_ciro = musteriler[0].ciro if musteriler else 1 %}
+                {% for m in musteriler %}
+                {% set pct = ((m.odenen / m.ciro * 100)|int) if m.ciro > 0 else 0 %}
+                <tr>
+                    <td class="muted">{{ loop.index }}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:32px;height:32px;border-radius:8px;background:var(--grad);color:#fff;display:grid;place-items:center;font-size:.78rem;font-weight:800;flex-shrink:0;">
+                                {{ m.unvan[0]|upper }}
+                            </div>
+                            <div>
+                                <div style="font-weight:600; font-size:.88rem;">{{ m.unvan }}</div>
+                                <div style="height:3px; width:{{ [(m.ciro/max_ciro*100)|int, 100]|min }}px; max-width:140px; background:var(--grad); border-radius:999px; margin-top:3px;"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="right"><strong>{{ "%.2f"|format(m.ciro) }} {{ CURRENCY }}</strong></td>
+                    <td class="right" style="color:var(--success);">{{ "%.2f"|format(m.odenen) }} {{ CURRENCY }}</td>
+                    <td class="right" style="color:{{ 'var(--danger)' if m.kalan > 0 else 'var(--success)' }};">{{ "%.2f"|format(m.kalan) }} {{ CURRENCY }}</td>
+                    <td class="right"><span class="badge badge-blue">{{ m.fatura_sayisi }}</span></td>
+                    <td class="right">
+                        <span class="badge {{ 'badge-green' if pct >= 80 else ('badge-amber' if pct >= 50 else 'badge-red') }}">%{{ pct }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight:800;">
+                    <td colspan="2">TOPLAM</td>
+                    <td class="right">{{ "%.2f"|format(toplam_ciro) }} {{ CURRENCY }}</td>
+                    <td class="right" style="color:var(--success);">{{ "%.2f"|format(toplam_odenen) }} {{ CURRENCY }}</td>
+                    <td class="right" style="color:var(--danger);">{{ "%.2f"|format(toplam_kalan) }} {{ CURRENCY }}</td>
+                    <td class="right">{{ toplam_fatura }}</td>
+                    <td class="right">
+                        {% if toplam_ciro > 0 %}
+                        <span class="badge badge-blue">%{{ ((toplam_odenen/toplam_ciro)*100)|int }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+{% else %}
+<div class="empty" style="margin-top:60px;"><div class="big">🤝</div><p>Henüz müşteri verisi yok.</p></div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if musteriler %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var txt = isDark ? '#94a3b8' : '#64748b';
+    var grid = isDark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.06)';
+    var labels = [{% for m in musteriler[:8] %}'{{ m.unvan[:14] }}'{{ ',' if not loop.last }}{% endfor %}];
+    var ciro   = [{% for m in musteriler[:8] %}{{ m.ciro }}{{ ',' if not loop.last }}{% endfor %}];
+    var odenen = [{% for m in musteriler[:8] %}{{ m.odenen }}{{ ',' if not loop.last }}{% endfor %}];
+    new Chart(document.getElementById('mkChart'), {
+        type:'bar',
+        data:{
+            labels:labels,
+            datasets:[
+                { label:'Ciro', data:ciro, backgroundColor:'rgba(99,102,241,.75)', borderRadius:6 },
+                { label:'Tahsilat', data:odenen, backgroundColor:'rgba(16,185,129,.7)', borderRadius:6 }
+            ]
+        },
+        options:{
+            responsive:true, indexAxis:'y',
+            plugins:{ legend:{ labels:{ color:txt } } },
+            scales:{
+                x:{ ticks:{ color:txt }, grid:{ color:grid } },
+                y:{ ticks:{ color:txt }, grid:{ color:grid } }
+            }
+        }
+    });
+}());
+</script>
+{% endif %}
+<style>
+.mk-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+@media(max-width:900px){ .mk-kpi-row{ grid-template-columns:repeat(2,1fr); } }
+.mk-kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; display:flex; align-items:center; gap:14px; }
+.mk-kpi-ico { width:44px; height:44px; border-radius:var(--radius-sm); display:grid; place-items:center; font-size:1.3rem; flex-shrink:0; }
+.mk-kpi-lbl { font-size:.75rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+.mk-kpi-val { font-size:1.1rem; font-weight:800; margin-top:2px; }
+
+.mk-top3-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px; }
+@media(max-width:700px){ .mk-top3-grid{ grid-template-columns:1fr; } }
+.mk-top3-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; text-align:center; position:relative; }
+.mk-top3-gold { border-color:#f59e0b66; background:linear-gradient(135deg,var(--surface),#f59e0b08); }
+.mk-top3-medal { font-size:1.8rem; margin-bottom:8px; }
+.mk-top3-avatar { width:52px; height:52px; border-radius:50%; background:var(--grad); color:#fff; font-size:1.3rem; font-weight:800; display:grid; place-items:center; margin:0 auto 10px; }
+.mk-top3-name { font-weight:700; font-size:.9rem; margin-bottom:4px; }
+.mk-top3-ciro { font-size:1.1rem; font-weight:800; color:var(--primary); margin-bottom:10px; }
+.mk-top3-bar-wrap { height:6px; background:var(--border); border-radius:999px; margin-bottom:6px; }
+.mk-top3-bar { height:100%; border-radius:999px; }
+
+.mk-main-grid { display:grid; grid-template-columns:1.5fr 1fr; gap:16px; }
+@media(max-width:900px){ .mk-main-grid{ grid-template-columns:1fr; } }
+</style>
+{% endblock %}

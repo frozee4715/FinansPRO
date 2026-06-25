@@ -1,0 +1,5 @@
+Flask>=3.0
+Werkzeug>=3.0
+python-dotenv>=1.0
+firebase-admin>=6.5
+gunicorn>=21.2

@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% set active = 'invoices' %}
+{% block title %}Yeni Teklif{% endblock %}
+{% block heading %}Yeni Teklif / Proforma{% endblock %}
+{% block crumb %}<a href="{{ url_for('invoices.list') }}">Faturalar</a> / <a href="{{ url_for('invoices.list', tip='teklif') }}">Teklifler</a> / Yeni{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+    <div class="card">
+        <div class="card-pad">
+            <form method="post" action="{{ url_for('invoices.teklif_create') }}" id="teklifForm">
+                <div class="flex" style="gap:16px;">
+                    <div class="field" style="flex:1;">
+                        <label>Teklif No</label>
+                        <input class="input" type="text" name="fatura_no"
+                               value="{{ form.fatura_no if form else onerilen_no }}">
+                    </div>
+                    <div class="field" style="flex:1;">
+                        <label>Tür</label>
+                        <select class="input" name="fatura_tipi">
+                            <option value="Teklif" selected>Teklif</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label>Müşteri *</label>
+                    <select class="input" name="musteri_id" required>
+                        <option value="">— Müşteri seçiniz —</option>
+                        {% for m in musteriler %}
+                        <option value="{{ m.id }}" {{ 'selected' if form and form.musteri_id == m.id|string }}>{{ m.unvan }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex" style="gap:16px;">
+                    <div class="field" style="flex:1;">
+                        <label>Teklif Tarihi *</label>
+                        <input class="input" type="date" name="tarih" required value="{{ form.tarih if form else '' }}">
+                    </div>
+                    <div class="field" style="flex:1;">
+                        <label>Geçerlilik Tarihi</label>
+                        <input class="input" type="date" name="gecerlilik_tarihi"
+                               value="{{ form.gecerlilik_tarihi if form else '' }}"
+                               title="Bu teklifin geçerli olduğu son tarih">
+                    </div>
+                </div>
+
+                <div class="flex" style="gap:16px;">
+                    <div class="field" style="flex:1;">
+                        <label>Ürün Kodu</label>
+                        <input class="input" type="text" name="urun_kodu"
+                               value="{{ form.urun_kodu if form else '' }}" placeholder="Opsiyonel">
+                    </div>
+                    <div class="field" style="flex:2;">
+                        <label>Açıklama</label>
+                        <input class="input" type="text" name="aciklama"
+                               value="{{ form.aciklama if form else '' }}" placeholder="Ürün/hizmet açıklaması">
+                    </div>
+                </div>
+
+                <div class="flex" style="gap:16px;">
+                    <div class="field" style="flex:1;">
+                        <label>Birim Fiyat (₺) *</label>
+                        <input class="input calc" type="number" step="0.01" min="0" name="birim_fiyat" required
+                               value="{{ form.birim_fiyat if form else '' }}" placeholder="0.00">
+                    </div>
+                    <div class="field" style="flex:1;">
+                        <label>Miktar *</label>
+                        <input class="input calc" type="number" step="1" min="1" name="miktar" required
+                               value="{{ form.miktar if form else '1' }}" placeholder="1">
+                    </div>
+                </div>
+
+                <div class="flex" style="gap:16px;">
+                    <div class="field" style="flex:1;">
+                        <label>İskonto (%)</label>
+                        <input class="input calc" type="number" step="0.01" min="0" name="iskonto"
+                               value="{{ form.iskonto if form else '0' }}" placeholder="0">
+                    </div>
+                    <div class="field" style="flex:1;">
+                        <label>KDV (%)</label>
+                        <input class="input calc" type="number" step="0.01" min="0" name="kdv"
+                               value="{{ form.kdv if form else '20' }}" placeholder="20">
+                    </div>
+                </div>
+
+                <div class="flex" style="gap:10px; margin-top:8px;">
+                    <button class="btn btn-primary" type="submit" {{ 'disabled' if not musteriler }}>📋 Teklif Oluştur</button>
+                    <a href="{{ url_for('invoices.list', tip='teklif') }}" class="btn btn-ghost">İptal</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Canlı hesap özeti -->
+    <div class="card" style="align-self:flex-start;">
+        <div class="card-head"><h3>Hesap Özeti</h3></div>
+        <div class="card-pad">
+            <div class="flex between" style="padding:9px 0; border-bottom:1px solid var(--border);">
+                <span class="muted">Ara Toplam</span><strong id="oAra">0.00 ₺</strong>
+            </div>
+            <div class="flex between" style="padding:9px 0; border-bottom:1px solid var(--border);">
+                <span class="muted">İskonto</span><strong id="oIsk" style="color:var(--danger);">0.00 ₺</strong>
+            </div>
+            <div class="flex between" style="padding:9px 0; border-bottom:1px solid var(--border);">
+                <span class="muted">KDV</span><strong id="oKdv">0.00 ₺</strong>
+            </div>
+            <div class="flex between" style="padding:14px 0 4px;">
+                <span style="font-weight:700;">Genel Toplam</span>
+                <span id="oTop" style="font-weight:800; font-size:1.3rem; color:var(--primary);">0.00 ₺</span>
+            </div>
+        </div>
+        <div class="card-pad" style="padding-top:0; border-top:1px solid var(--border);">
+            <p class="muted" style="font-size:0.85rem; margin:8px 0 0;">
+                Teklif onaylandığında "Faturaya Dönüştür" işlemiyle gerçek faturaya çevrilebilir.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function hesapla() {
+    const bf = parseFloat(document.querySelector('[name=birim_fiyat]').value) || 0;
+    const mk = parseFloat(document.querySelector('[name=miktar]').value) || 0;
+    const isk = parseFloat(document.querySelector('[name=iskonto]').value) || 0;
+    const kdv = parseFloat(document.querySelector('[name=kdv]').value) || 0;
+    const ara = bf * mk;
+    const iskT = ara * isk / 100;
+    const matrah = ara - iskT;
+    const kdvT = matrah * kdv / 100;
+    const top = matrah + kdvT;
+    const f = (n) => n.toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ₺';
+    document.getElementById('oAra').textContent = f(ara);
+    document.getElementById('oIsk').textContent = '-' + f(iskT);
+    document.getElementById('oKdv').textContent = f(kdvT);
+    document.getElementById('oTop').textContent = f(top);
+}
+document.querySelectorAll('.calc').forEach(el => el.addEventListener('input', hesapla));
+hesapla();
+</script>
+{% endblock %}

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giriş · {{ APP_NAME }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="auth-wrap">
+    <!-- Sol tanıtım paneli -->
+    <div class="auth-hero">
+        <div class="hero-orb orb-1"></div>
+        <div class="hero-orb orb-2"></div>
+
+        <div class="brand">
+            <span class="brand-logo"><img src="{{ url_for('static', filename='img/logo-mark.svg') }}" alt=""></span>
+            {{ APP_NAME }}
+        </div>
+
+        <div class="hero-body">
+            <h1>İşletmenizin finansını<br>tek panelden yönetin.</h1>
+            <p>{{ APP_TAGLINE }} — faturalar, müşteriler, stok ve tahsilatlar; akıcı ve modern bir arayüzde.</p>
+
+            <!-- Animasyonlu mini önizleme -->
+            <div class="hero-preview">
+                <div class="hp-bar"></div>
+                <div class="hp-row">
+                    <div class="hp-mark"><img src="{{ url_for('static', filename='img/logo-mark.svg') }}" alt=""></div>
+                    <div>
+                        <div class="hp-label">Toplam Ciro · Bu ay</div>
+                        <div class="hp-value">₺ 248.500</div>
+                    </div>
+                    <div class="hp-trend">▲ %12,4</div>
+                </div>
+                <div class="hp-chart">
+                    <span style="--h:46%"></span>
+                    <span style="--h:72%"></span>
+                    <span style="--h:38%"></span>
+                    <span style="--h:88%"></span>
+                    <span style="--h:60%"></span>
+                    <span style="--h:96%"></span>
+                </div>
+            </div>
+
+            <ul class="auth-points">
+                <li style="--d:.1s"><span class="tick">✓</span> Şifreli ve güvenli üyelik sistemi</li>
+                <li style="--d:.25s"><span class="tick">✓</span> Anlık gösterge paneli ve raporlar</li>
+                <li style="--d:.4s"><span class="tick">✓</span> KDV & iskontolu fatura hesaplama</li>
+                <li style="--d:.55s"><span class="tick">✓</span> PDF fatura çıktısı ve dışa aktarım</li>
+            </ul>
+        </div>
+
+        <div class="foot">© 2026 {{ APP_NAME }} · Tüm hakları saklıdır.</div>
+    </div>
+
+    <!-- Sağ form paneli -->
+    <div class="auth-panel">
+        <div class="auth-card">
+            <h2>Tekrar hoş geldiniz 👋</h2>
+            <p class="sub">Devam etmek için hesabınıza giriş yapın.</p>
+
+            <form method="post" action="{{ url_for('auth.login') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="field">
+                    <label>E-posta veya Kullanıcı Adı</label>
+                    <input class="input" type="text" name="identifier" value="{{ identifier }}"
+                           placeholder="ornek@firma.com" autofocus required>
+                </div>
+                <div class="field">
+                    <label>Şifre</label>
+                    <input class="input" type="password" name="parola" placeholder="••••••••" required>
+                </div>
+                <button class="btn btn-primary btn-block" type="submit">Giriş Yap</button>
+            </form>
+
+            <div class="auth-switch">
+                Hesabınız yok mu? <a href="{{ url_for('auth.register') }}">Hemen kayıt olun</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% include 'partials/flashes.html' %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.0.3/dist/twemoji.min.js"
+        integrity="sha384-87FqG7RvL0CU7i3nP4AqSCq5NlIaF5+SNk84VJRSkTp6RvfmBvRXFjcTfCzmeHoz"
+        crossorigin="anonymous"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
+    });
+</script>
+</body>
+</html>

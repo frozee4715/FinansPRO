@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% set active = 'expenses' %}
+{% block title %}Giderler{% endblock %}
+{% block heading %}Giderler{% endblock %}
+{% block crumb %}İşletme masraflarınızı takip edin{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('exports.expenses_csv') }}" class="btn btn-ghost btn-sm">⬇️ CSV</a>
+    <a href="{{ url_for('expenses.create') }}" class="btn btn-primary btn-sm">＋ Yeni Gider</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-head">
+        <h3>Gider Listesi <span class="muted" style="font-weight:500;">({{ giderler|length }})</span>
+            <span class="badge badge-red" style="margin-left:8px;">Toplam: {{ "%.2f"|format(toplam) }} {{ CURRENCY }}</span>
+        </h3>
+        <form method="get" class="flex" style="gap:8px;">
+            <input class="input btn-sm" style="width:240px;" type="text" name="q" value="{{ q }}" placeholder="🔍 Gider ara...">
+            <button class="btn btn-ghost btn-sm" type="submit">Ara</button>
+            {% if q %}<a href="{{ url_for('expenses.list') }}" class="btn btn-ghost btn-sm">✕</a>{% endif %}
+        </form>
+    </div>
+
+    {% if giderler %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th>Ödeme</th><th class="right">Tutar</th><th class="right">İşlem</th></tr></thead>
+            <tbody>
+                {% for g in giderler %}
+                <tr>
+                    <td class="muted">{{ g.tarih or '—' }}</td>
+                    <td><span class="badge badge-blue">{{ g.kategori }}</span></td>
+                    <td>{{ g.aciklama or '—' }}</td>
+                    <td class="muted">{{ g.odeme_tipi or '—' }}</td>
+                    <td class="right"><strong>{{ "%.2f"|format(g.tutar or 0) }} {{ CURRENCY }}</strong></td>
+                    <td class="right">
+                        <div class="flex" style="justify-content:flex-end; gap:6px;">
+                            <a href="{{ url_for('expenses.edit', eid=g.id) }}" class="btn btn-ghost btn-sm">Düzenle</a>
+                            <form method="post" action="{{ url_for('expenses.delete', eid=g.id) }}"
+                                  data-confirm="Bu gideri silmek istediğinize emin misiniz?">
+                                <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">💸</div>
+        <p>{{ 'Aramanıza uygun gider bulunamadı.' if q else 'Henüz gider eklenmemiş.' }}</p>
+        <a href="{{ url_for('expenses.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">İlk gideri ekle</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

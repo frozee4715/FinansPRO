@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% set active = 'admin' %}
+{% block title %}Admin Paneli{% endblock %}
+{% block heading %}Admin Paneli{% endblock %}
+{% block crumb %}Sistem yönetim merkezi{% endblock %}
+
+{% block content %}
+
+{# Pro kullanıcı sayısı #}
+{% set pro_count = kullanicilar | selectattr('plan', 'equalto', 'pro') | list | length %}
+
+<!-- ── Hero banner ─────────────────────────────────────────────────── -->
+<div class="admin-hero">
+    <div class="admin-hero-left">
+        <span class="admin-badge-tag">🛡️ YÖNETİCİ KONSOLU</span>
+        <h2>Sistem Yönetim Merkezi</h2>
+        <p>Kullanıcıları yönetin, plan yükseltmeleri yapın ve sistem durumunu gerçek zamanlı izleyin.</p>
+    </div>
+    <div class="admin-kpi-row">
+        <div class="admin-kpi">
+            <span class="admin-kpi-val">{{ kullanicilar|length }}</span>
+            <span class="admin-kpi-lbl">Kullanıcı</span>
+        </div>
+        <div class="admin-kpi">
+            <span class="admin-kpi-val">{{ pro_count }}</span>
+            <span class="admin-kpi-lbl">Pro Üye</span>
+        </div>
+        <div class="admin-kpi">
+            <span class="admin-kpi-val">{{ stats.musteri }}</span>
+            <span class="admin-kpi-lbl">Müşteri</span>
+        </div>
+        <div class="admin-kpi">
+            <span class="admin-kpi-val">{{ stats.fatura }}</span>
+            <span class="admin-kpi-lbl">Fatura</span>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sistem istatistikleri ────────────────────────────────────────── -->
+<div class="stat-grid">
+    <div class="stat">
+        <div class="stat-ico ic-blue">👥</div>
+        <div class="stat-label">Toplam Kullanıcı</div>
+        <div class="stat-value">{{ kullanicilar|length }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-green">🤝</div>
+        <div class="stat-label">Müşteri</div>
+        <div class="stat-value">{{ stats.musteri }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-amber">📦</div>
+        <div class="stat-label">Ürün</div>
+        <div class="stat-value">{{ stats.urun }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat-ico ic-sky">🧾</div>
+        <div class="stat-label">Fatura</div>
+        <div class="stat-value">{{ stats.fatura }}</div>
+    </div>
+</div>
+
+<!-- ── Kullanıcı yönetimi ────────────────────────────────────────────── -->
+<div class="card">
+    <div class="card-head">
+        <h3>🛡️ Kullanıcı Yönetimi</h3>
+        <span class="badge badge-blue">{{ kullanicilar|length }} kayıt</span>
+    </div>
+
+    <!-- Tablo başlık satırı -->
+    <div style="display:grid; grid-template-columns:2.2fr 1.5fr 1fr 1.8fr; gap:16px;
+                padding:10px 26px; border-bottom:1px solid var(--border); background:var(--surface-2);">
+        <span style="font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted);">Kullanıcı</span>
+        <span style="font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted);">Roller & Plan</span>
+        <span style="font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted);">Son Giriş</span>
+        <span style="font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); text-align:right;">İşlemler</span>
+    </div>
+
+    <div class="admin-user-list">
+        {% for u in kullanicilar %}
+        <div class="admin-user-row {{ 'aur-pro' if u.plan == 'pro' else '' }}">
+
+            <!-- Kimlik -->
+            <div class="aur-ident">
+                <div class="aur-avatar {{ 'aur-avatar-pro' if u.plan == 'pro' else '' }}">
+                    {{ u.name[0].upper() }}
+                </div>
+                <div>
+                    <div class="aur-name">
+                        {{ u.name }}
+                        {% if u.id == current_user.id %}
+                            <span class="badge badge-blue" style="font-size:.67rem; padding:3px 9px;">Siz</span>
+                        {% endif %}
+                    </div>
+                    <div class="aur-email">{{ u.eposta or '—' }}</div>
+                </div>
+            </div>
+
+            <!-- Badges -->
+            <div class="aur-badges">
+                {% if u.rol == 'admin' %}
+                    <span class="badge badge-amber">🛡️ Yönetici</span>
+                {% else %}
+                    <span class="badge badge-gray">Kullanıcı</span>
+                {% endif %}
+
+                {% if u.plan == 'pro' %}
+                    <span class="badge pro-badge-row">✨ Pro</span>
+                {% else %}
+                    <span class="badge badge-gray" style="color:var(--text-light);">Ücretsiz</span>
+                {% endif %}
+
+                {% if u.aktif %}
+                    <span class="badge badge-green">● Aktif</span>
+                {% else %}
+                    <span class="badge badge-red">● Pasif</span>
+                {% endif %}
+            </div>
+
+            <!-- Son giriş -->
+            <div class="aur-meta">
+                <span class="aur-meta-label">Son giriş</span>
+                <span class="aur-meta-val">
+                    {% if u.son_giris %}{{ u.son_giris[:10] }}{% else %}Hiç{% endif %}
+                </span>
+            </div>
+
+            <!-- İşlemler -->
+            {% if u.id != current_user.id %}
+            <div class="aur-actions">
+                <form method="post" action="{{ url_for('admin.change_plan', uid=u.id) }}" style="display:inline-flex;">
+                    <button class="aur-btn {{ 'aur-btn-ungrant' if u.plan=='pro' else 'aur-btn-pro' }}" type="submit">
+                        {{ '↩' if u.plan=='pro' else '✨' }}
+                        <span>{{ 'Pro Geri Al' if u.plan=='pro' else 'Pro Ver' }}</span>
+                    </button>
+                </form>
+                <form method="post" action="{{ url_for('admin.change_role', uid=u.id) }}" style="display:inline-flex;">
+                    <input type="hidden" name="rol" value="{{ 'kullanici' if u.rol=='admin' else 'admin' }}">
+                    <button class="aur-btn aur-btn-role" type="submit">
+                        🛡️ <span>{{ 'Yetkiyi Al' if u.rol=='admin' else 'Yön. Yap' }}</span>
+                    </button>
+                </form>
+                <form method="post" action="{{ url_for('admin.toggle_active', uid=u.id) }}" style="display:inline-flex;">
+                    <button class="aur-btn aur-btn-toggle" type="submit">
+                        {{ '🔕' if u.aktif else '🔔' }}
+                        <span>{{ 'Pasif' if u.aktif else 'Aktif' }}</span>
+                    </button>
+                </form>
+                <form method="post" action="{{ url_for('admin.delete', uid=u.id) }}" style="display:inline-flex;"
+                      data-confirm=""{{ u.name }}" kullanıcısını silmek istediğinize emin misiniz?">
+                    <button class="aur-btn aur-btn-danger" type="submit" title="Sil">🗑️</button>
+                </form>
+            </div>
+            {% else %}
+            <div class="aur-actions">
+                <span class="aur-self-note">— kendi hesabınız —</span>
+            </div>
+            {% endif %}
+
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% endblock %}

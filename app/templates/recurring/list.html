@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% set active = 'recurring' %}
+{% block title %}Tekrarlayan Faturalar{% endblock %}
+{% block heading %}Tekrarlayan Faturalar{% endblock %}
+{% block crumb %}Otomatik / periyodik fatura tanımları{% endblock %}
+{% block actions %}
+    <a href="{{ url_for('recurring.create') }}" class="btn btn-primary btn-sm">＋ Yeni Tanım</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-head">
+        <h3>Tekrarlayan Fatura Listesi <span class="muted" style="font-weight:500;">({{ kayitlar|length }})</span></h3>
+    </div>
+
+    {% if kayitlar %}
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Müşteri</th>
+                    <th>Açıklama</th>
+                    <th class="right">Tutar</th>
+                    <th>KDV %</th>
+                    <th>Periyot</th>
+                    <th>Sonraki Tarih</th>
+                    <th>Durum</th>
+                    <th class="right">İşlem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for k in kayitlar %}
+                <tr>
+                    <td><strong>{{ k.musteri_unvan or '—' }}</strong></td>
+                    <td>{{ k.aciklama or '—' }}</td>
+                    <td class="right">{{ "%.2f"|format(k.tutar or 0) }} ₺</td>
+                    <td>%{{ k.kdv or 0 }}</td>
+                    <td>
+                        {% if k.periyot == 'Haftalık' %}<span class="badge badge-blue">Haftalık</span>
+                        {% elif k.periyot == 'Aylık' %}<span class="badge badge-amber">Aylık</span>
+                        {% else %}<span class="badge">Yıllık</span>{% endif %}
+                    </td>
+                    <td class="muted">{{ k.sonraki_tarih or '—' }}</td>
+                    <td>
+                        {% if k.aktif %}
+                            <span class="badge badge-green">Aktif</span>
+                        {% else %}
+                            <span class="badge badge-red">Pasif</span>
+                        {% endif %}
+                    </td>
+                    <td class="right">
+                        <div class="flex" style="justify-content:flex-end; gap:6px;">
+                            <!-- Şimdi Oluştur -->
+                            <form method="post" action="{{ url_for('recurring.fire_now', rid=k.id) }}"
+                                  data-confirm="'{{ k.aciklama or k.musteri_unvan }}' için şimdi fatura oluşturulsun mu?">
+                                <button class="btn btn-primary btn-sm" type="submit" title="Şimdi fatura oluştur">▶ Çalıştır</button>
+                            </form>
+                            <!-- Aktif / Pasif -->
+                            <form method="post" action="{{ url_for('recurring.toggle', rid=k.id) }}">
+                                <button class="btn btn-ghost btn-sm" type="submit">
+                                    {{ 'Durdur' if k.aktif else 'Başlat' }}
+                                </button>
+                            </form>
+                            <!-- Sil -->
+                            <form method="post" action="{{ url_for('recurring.delete', rid=k.id) }}"
+                                  data-confirm="Bu tekrarlayan tanımı silmek istediğinize emin misiniz?">
+                                <button class="btn btn-danger btn-sm" type="submit">Sil</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <div class="big">🔄</div>
+        <p>Henüz tekrarlayan fatura tanımı oluşturulmamış.</p>
+        <a href="{{ url_for('recurring.create') }}" class="btn btn-primary btn-sm" style="margin-top:14px;">İlk tanımı oluştur</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

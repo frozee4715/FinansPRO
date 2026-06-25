@@ -1,0 +1,5 @@
+.env
+__pycache__/
+*.pyc
+*.db
+fitai-ea8c5-firebase-adminsdk-fbsvc-b9a6aece76.json

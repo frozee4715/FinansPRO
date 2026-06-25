@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% set active = 'suppliers' %}
+{% block title %}{{ 'Tedarikçi Düzenle' if mode=='edit' else 'Yeni Tedarikçi' }}{% endblock %}
+{% block heading %}{{ 'Tedarikçi Düzenle' if mode=='edit' else 'Yeni Tedarikçi' }}{% endblock %}
+{% block crumb %}<a href="{{ url_for('suppliers.list') }}">Tedarikçiler</a> / {{ 'Düzenle' if mode=='edit' else 'Yeni' }}{% endblock %}
+
+{% block content %}
+<div class="pay-form-grid">
+
+    <!-- Sol: Form -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+        <form method="post" action="{{ url_for('suppliers.edit', sid=sid) if mode=='edit' else url_for('suppliers.create') }}">
+
+            <div class="card">
+                <div class="card-head">
+                    <h3>{{ 'Tedarikçiyi Güncelle' if mode=='edit' else 'Yeni Tedarikçi Ekle' }}</h3>
+                </div>
+                <div class="card-pad" style="display:flex; flex-direction:column; gap:16px;">
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Ünvan / Firma Adı *</label>
+                        <input class="input" type="text" name="unvan" maxlength="120" required
+                               value="{{ t.unvan if t else '' }}" placeholder="Örn: ABC Tedarik A.Ş.">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Vergi / TC No</label>
+                            <input class="input" type="text" name="vergi_no" maxlength="11"
+                                   value="{{ t.vergi_no if t else '' }}" placeholder="11 haneye kadar">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Telefon</label>
+                            <input class="input" type="text" name="telefon"
+                                   value="{{ t.telefon if t else '' }}" placeholder="+90 5xx xxx xx xx">
+                        </div>
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">E-posta</label>
+                        <input class="input" type="email" name="eposta"
+                               value="{{ t.eposta if t else '' }}" placeholder="tedarikci@firma.com">
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Adres</label>
+                        <input class="input" type="text" name="adres"
+                               value="{{ t.adres if t else '' }}" placeholder="Açık adres">
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Notlar</label>
+                        <textarea class="input" name="notlar" rows="3"
+                                  placeholder="Ödeme koşulları, anlaşma detayları vb." style="resize:vertical;">{{ t.notlar if t else '' }}</textarea>
+                    </div>
+
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" type="submit" style="flex:1;">
+                    {{ '💾 Güncelle' if mode=='edit' else '🏭 Tedarikçiyi Kaydet' }}
+                </button>
+                <a href="{{ url_for('suppliers.list') }}" class="btn btn-ghost">İptal</a>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Sağ: Bilgi paneli -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <div class="card">
+            <div class="form-aside-hero">
+                <span class="fa-ico">🏭</span>
+                <h4>Tedarikçi Yönetimi</h4>
+                <p>Tedarikçi bilgilerini kaydedin; alış faturaları ve ödemelerinizi kolayca takip edin.</p>
+            </div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px; padding-top:14px;">
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">🏢</span><span>Ticaret sicilinde kayıtlı tam unvanı girin. Alış faturalarında kullanılır.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">📝</span><span>Ödeme vadesi, anlaşmalı iskonto gibi detayları Notlar alanına yazın.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">📤</span><span>Tüm tedarikçilerinizi Raporlar sayfasından CSV olarak indirebilirsiniz.</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>Tedarikçi İstatistikleri</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:12px;">
+                {% for ico, lbl, renk in [('📥','Alış Faturaları','var(--primary)'),('💸','Yapılan Ödemeler','var(--success)'),('⏳','Bekleyen Borç','var(--danger)')] %}
+                <div style="display:flex; align-items:center; gap:10px; font-size:.85rem;">
+                    <span style="font-size:1.2rem; width:28px; text-align:center;">{{ ico }}</span>
+                    <span style="flex:1; color:var(--muted);">{{ lbl }}</span>
+                    <span style="width:8px; height:8px; border-radius:50%; background:{{ renk }};"></span>
+                </div>
+                {% endfor %}
+                <div class="pay-tip-info" style="margin-top:4px;"><span class="pay-tip-info-ico">ℹ️</span><span>Kaydetikten sonra tedarikçi sayfasında detaylı özet görünür.</span></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

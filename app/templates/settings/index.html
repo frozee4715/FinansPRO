@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+{% set active = 'settings' %}
+{% block title %}Ayarlar{% endblock %}
+{% block heading %}Ayarlar{% endblock %}
+{% block crumb %}Şirket bilgileri, logo ve marka rengi{% endblock %}
+
+{% block content %}
+<form method="post" action="{{ url_for('settings.index') }}" enctype="multipart/form-data">
+<div style="display:flex; flex-direction:column; gap:22px; max-width:760px;">
+
+    <!-- Şirket Bilgileri -->
+    <div class="card">
+        <div class="card-head"><h3>🏢 Şirket Bilgileri</h3></div>
+        <div class="card-pad">
+            <p class="muted" style="margin-bottom:18px; font-size:.88rem;">Bu bilgiler fatura çıktılarının üst kısmında görünür.</p>
+            <div class="field">
+                <label>Şirket Ünvanı</label>
+                <input class="input" type="text" name="sirket_unvan" value="{{ s.sirket_unvan or '' }}" placeholder="Örn: Örnek Ticaret Ltd. Şti.">
+            </div>
+            <div class="flex" style="gap:16px;">
+                <div class="field" style="flex:1;">
+                    <label>Vergi Dairesi / No</label>
+                    <input class="input" type="text" name="sirket_vergi_no" value="{{ s.sirket_vergi_no or '' }}">
+                </div>
+                <div class="field" style="flex:1;">
+                    <label>Telefon</label>
+                    <input class="input" type="text" name="sirket_telefon" value="{{ s.sirket_telefon or '' }}">
+                </div>
+            </div>
+            <div class="field">
+                <label>E-posta</label>
+                <input class="input" type="email" name="sirket_eposta" value="{{ s.sirket_eposta or '' }}">
+            </div>
+            <div class="field" style="margin-bottom:0;">
+                <label>Adres</label>
+                <input class="input" type="text" name="sirket_adres" value="{{ s.sirket_adres or '' }}">
+            </div>
+        </div>
+    </div>
+
+    <!-- Kişiselleştirme -->
+    <div class="card">
+        <div class="card-head">
+            <h3>🎨 Kişiselleştirme</h3>
+            <span class="badge pro-badge-row">✨ Pro</span>
+        </div>
+        <div class="card-pad">
+
+            <!-- Marka rengi -->
+            <div class="section-title">Marka Rengi</div>
+            <p class="muted" style="font-size:.86rem; margin-bottom:14px;">Butonlar, sidebar aktif menü ve vurgu renkleri bu renge dönüşür.</p>
+
+            <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                <!-- Hazır renkler -->
+                <div style="display:flex; gap:9px; flex-wrap:wrap;">
+                    {% set renkler = [
+                        ('#7c3aed', 'Mor (Varsayılan)'),
+                        ('#2563eb', 'Kobalt Mavi'),
+                        ('#059669', 'Yeşil'),
+                        ('#d97706', 'Turuncu'),
+                        ('#dc2626', 'Kırmızı'),
+                        ('#db2777', 'Pembe'),
+                        ('#0891b2', 'Turkuaz'),
+                        ('#1f2937', 'Antrasit'),
+                    ] %}
+                    {% for hex, ad in renkler %}
+                    <button type="button" title="{{ ad }}"
+                        onclick="setColor('{{ hex }}')"
+                        style="width:34px; height:34px; border-radius:10px; border:3px solid {{ 'var(--primary)' if s.marka_renk == hex else 'transparent' }};
+                               background:{{ hex }}; cursor:pointer; transition:transform .12s; outline:none;"
+                        onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1)'">
+                    </button>
+                    {% endfor %}
+                </div>
+
+                <!-- Özel renk seçici -->
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="color" id="renkPicker" value="{{ s.marka_renk or '#7c3aed' }}"
+                           style="width:44px; height:44px; border:none; border-radius:10px; cursor:pointer; padding:2px;"
+                           oninput="setColor(this.value)">
+                    <span class="muted" style="font-size:.84rem;">Özel renk</span>
+                </div>
+
+                <input type="hidden" name="marka_renk" id="renkInput" value="{{ s.marka_renk or '' }}">
+            </div>
+
+            <!-- Canlı önizleme şeridi -->
+            <div id="renkOnizleme" style="margin-top:18px; border-radius:14px; overflow:hidden; border:1px solid var(--border);">
+                <div id="renkBar" style="height:8px; background:{{ s.marka_renk or 'var(--grad)' }};"></div>
+                <div style="padding:14px 18px; display:flex; align-items:center; gap:12px; background:var(--surface-2);">
+                    <div id="renkButon" style="padding:8px 18px; border-radius:10px; color:#fff; font-weight:700; font-size:.88rem;
+                                              background:{{ s.marka_renk or '#7c3aed' }};">Buton Örneği</div>
+                    <div id="renkBadge" style="padding:4px 12px; border-radius:999px; color:#fff; font-size:.78rem; font-weight:800;
+                                              background:{{ s.marka_renk or '#7c3aed' }};">Rozet</div>
+                    <span class="muted" style="font-size:.82rem;">Canlı önizleme</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Muhasebe Varsayılanları -->
+    <div class="card">
+        <div class="card-head"><h3>🧮 Muhasebe Varsayılanları</h3></div>
+        <div class="card-pad">
+            <div class="flex" style="gap:16px;">
+                <div class="field" style="flex:1; margin-bottom:0;">
+                    <label>Para Birimi</label>
+                    <input class="input" type="text" name="para_birimi" value="{{ s.para_birimi }}" maxlength="4" placeholder="₺">
+                </div>
+                <div class="field" style="flex:1; margin-bottom:0;">
+                    <label>Varsayılan KDV (%)</label>
+                    <input class="input" type="number" min="0" max="100" name="varsayilan_kdv" value="{{ s.varsayilan_kdv }}">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kaydet -->
+    <div class="flex" style="gap:10px;">
+        <button class="btn btn-primary" type="submit">💾 Tüm Ayarları Kaydet</button>
+        <a href="{{ url_for('billing.upgrade') }}" class="btn btn-ghost">✨ Pro Sürüm</a>
+    </div>
+
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function setColor(hex) {
+    document.getElementById('renkInput').value = hex;
+    document.getElementById('renkPicker').value = hex;
+    document.getElementById('renkBar').style.background = hex;
+    document.getElementById('renkButon').style.background = hex;
+    document.getElementById('renkBadge').style.background = hex;
+    // Hazır renk seçim çerçevesi güncelle
+    document.querySelectorAll('[onclick^="setColor"]').forEach(function(btn) {
+        var btnHex = btn.getAttribute('onclick').match(/'([^']+)'/)[1];
+        btn.style.borderColor = btnHex === hex ? '#7c3aed' : 'transparent';
+    });
+}
+
+function previewLogo(input) {
+    if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var preview = input.closest('div').parentElement.querySelector('div img, div span');
+            var container = input.closest('.card-pad').querySelector('[style*="88px"]');
+            container.innerHTML = '<img src="' + e.target.result + '" style="width:100%;height:100%;object-fit:contain;border-radius:16px;">';
+        };
+        reader.readAsDataURL(input.files[0]);
+        document.getElementById('logoName').textContent = input.files[0].name;
+    }
+}
+</script>
+{% endblock %}

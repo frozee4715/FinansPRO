@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% set active = 'customers' %}
+{% block title %}{{ 'Müşteri Düzenle' if mode=='edit' else 'Yeni Müşteri' }}{% endblock %}
+{% block heading %}{{ 'Müşteri Düzenle' if mode=='edit' else 'Yeni Müşteri' }}{% endblock %}
+{% block crumb %}<a href="{{ url_for('customers.list') }}">Müşteriler</a> / {{ 'Düzenle' if mode=='edit' else 'Yeni' }}{% endblock %}
+
+{% block content %}
+<div class="pay-form-grid">
+
+    <!-- Sol: Form -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+        <form method="post" action="{{ url_for('customers.edit', cid=cid) if mode=='edit' else url_for('customers.create') }}">
+
+            <div class="card">
+                <div class="card-head">
+                    <h3>{{ 'Müşteri Bilgilerini Güncelle' if mode=='edit' else 'Yeni Müşteri Ekle' }}</h3>
+                </div>
+                <div class="card-pad" style="display:flex; flex-direction:column; gap:16px;">
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Ünvan / Ad Soyad *</label>
+                        <input class="input" type="text" name="unvan" maxlength="60" required
+                               value="{{ musteri.unvan if musteri else '' }}" placeholder="Örn: ABC Ticaret Ltd. Şti.">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Vergi / TC No</label>
+                            <input class="input" type="text" name="vergi_no" maxlength="11"
+                                   value="{{ musteri.vergi_no if musteri else '' }}" placeholder="11 haneye kadar">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Telefon</label>
+                            <input class="input" type="text" name="telefon"
+                                   value="{{ musteri.telefon if musteri else '' }}" placeholder="+90 5xx xxx xx xx">
+                        </div>
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">E-posta</label>
+                        <input class="input" type="email" name="eposta"
+                               value="{{ musteri.eposta if musteri else '' }}" placeholder="ornek@firma.com">
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Adres</label>
+                        <input class="input" type="text" name="adres"
+                               value="{{ musteri.adres if musteri else '' }}" placeholder="Açık adres">
+                    </div>
+
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" type="submit" style="flex:1;">
+                    {{ '💾 Güncelle' if mode=='edit' else '🤝 Müşteriyi Kaydet' }}
+                </button>
+                <a href="{{ url_for('customers.list') }}" class="btn btn-ghost">İptal</a>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Sağ: Bilgi paneli -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <div class="card">
+            <div class="form-aside-hero">
+                <span class="fa-ico">🤝</span>
+                <h4>Müşteri Bilgileri</h4>
+                <p>Eksiksiz bilgi girerek fatura ve raporlarınızın doğruluğunu artırın.</p>
+            </div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px; padding-top:14px;">
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">🏢</span><span>Firma ünvanı veya bireysel müşteri için tam adı girin. Faturalarda bu isim kullanılır.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">🔢</span><span>Şirketler için 10 haneli vergi kimlik no; bireyler için 11 haneli TC kimlik no.</span></div>
+                <div class="pay-tip-info"><span class="pay-tip-info-ico">✉️</span><span>Otomatik fatura bildirimleri bu adrese gönderilir. Boş bırakabilirsiniz.</span></div>
+            </div>
+        </div>
+
+        {% if mode == 'edit' and musteri %}
+        <div class="card">
+            <div class="card-head"><h3>Hızlı İşlemler</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:8px;">
+                <a href="{{ url_for('invoices.list') }}?q={{ musteri.unvan }}" class="btn btn-ghost" style="width:100%; text-align:center;">🧾 Faturalarını Gör</a>
+                <a href="{{ url_for('reports.musteri_karlilik') }}" class="btn btn-ghost" style="width:100%; text-align:center;">📊 Karlılık Raporu</a>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-head"><h3>Müşteri Tipleri</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px;">
+                {% for ico, tip, aciklama in [('🏢','Kurumsal','Tüzel kişi, vergi numarası gerekli'),('👤','Bireysel','TC kimlik numarası ile'),('🌍','Yabancı','Uluslararası müşteriler')] %}
+                <div style="display:flex; align-items:center; gap:10px; font-size:.82rem;">
+                    <span style="font-size:1.1rem; width:22px;">{{ ico }}</span>
+                    <div><div style="font-weight:600; color:var(--text);">{{ tip }}</div><div class="muted">{{ aciklama }}</div></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

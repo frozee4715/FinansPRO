@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% set active = 'ai' %}
+{% block title %}AI Asistan{% endblock %}
+{% block heading %}Yapay Zekâ Asistanı <span class="pro-badge">PRO</span>{% endblock %}
+{% block crumb %}İşletme verinize göre finans danışmanınız · {{ model }}{% endblock %}
+{% block actions %}
+    {% if gecmis %}
+    <form method="post" action="{{ url_for('ai.clear') }}">
+        <button class="btn btn-ghost btn-sm" type="submit">🗑️ Sohbeti temizle</button>
+    </form>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+{% if not anahtar_var %}
+<div class="card" style="margin-bottom:18px; border-left:4px solid var(--warning);">
+    <div class="card-pad">
+        <strong>⚠️ AI anahtarı tanımlı değil.</strong>
+        <p class="muted" style="margin-top:6px;">Asistanı kullanmak için <code>web/.env</code> dosyasına
+        <code>OPENROUTER_API_KEY=...</code> ekleyip uygulamayı yeniden başlatın.</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="card chat-card">
+    <div class="chat-stream" id="chatStream">
+        {% if not gecmis %}
+        <div class="chat-empty">
+            <div class="big">🤖</div>
+            <p>Merhaba! Finansal verileriniz hakkında soru sorun.</p>
+            <div class="chat-suggestions">
+                <span>Bu ay kârım ne durumda?</span>
+                <span>Vadesi geçen alacaklarım var mı?</span>
+                <span>Nakit akışımı nasıl iyileştirebilirim?</span>
+            </div>
+        </div>
+        {% endif %}
+        {% for m in gecmis %}
+        <div class="bubble-row {{ 'me' if m.role == 'user' else 'ai' }}">
+            {% if m.role != 'user' %}<div class="bubble-ava">🤖</div>{% endif %}
+            <div class="bubble">{{ m.content }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <form method="post" action="{{ url_for('ai.send') }}" class="chat-input">
+        <input class="input" type="text" name="mesaj" autocomplete="off" autofocus
+               placeholder="Bir soru yazın..." {{ 'disabled' if not anahtar_var }}>
+        <button class="btn btn-primary" type="submit" {{ 'disabled' if not anahtar_var }}>Gönder ➤</button>
+    </form>
+</div>
+<p class="muted" style="font-size:.8rem; margin-top:10px;">Yapay zekâ hata yapabilir; önemli kararlar için mali müşavirinize danışın.</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Sohbeti her zaman en alta kaydır
+    var s = document.getElementById('chatStream');
+    if (s) s.scrollTop = s.scrollHeight;
+    // Öneri tıklayınca input'a yaz
+    document.querySelectorAll('.chat-suggestions span').forEach(function (el) {
+        el.addEventListener('click', function () {
+            var inp = document.querySelector('.chat-input input');
+            if (inp) { inp.value = el.textContent; inp.focus(); }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% set active = 'expenses' %}
+{% block title %}{{ 'Gider Düzenle' if mode=='edit' else 'Yeni Gider' }}{% endblock %}
+{% block heading %}{{ 'Gider Düzenle' if mode=='edit' else 'Yeni Gider' }}{% endblock %}
+{% block crumb %}<a href="{{ url_for('expenses.list') }}">Giderler</a> / {{ 'Düzenle' if mode=='edit' else 'Yeni' }}{% endblock %}
+
+{% block content %}
+<div class="pay-form-grid">
+
+    <!-- Sol: Form -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <form method="post" action="{{ url_for('expenses.edit', eid=eid) if mode=='edit' else url_for('expenses.create') }}">
+
+            <div class="card">
+                <div class="card-head">
+                    <h3>{{ 'Gideri Güncelle' if mode=='edit' else 'Yeni Gider Ekle' }}</h3>
+                </div>
+                <div class="card-pad" style="display:flex; flex-direction:column; gap:16px;">
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Tarih *</label>
+                            <input class="input" type="date" name="tarih" required
+                                   value="{{ gider.tarih if gider else '' }}">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label class="field-lbl">Tutar ({{ CURRENCY }}) *</label>
+                            <input class="input" type="number" step="0.01" min="0" name="tutar" required
+                                   id="tutarGider"
+                                   value="{{ gider.tutar if gider else '' }}" placeholder="0.00">
+                        </div>
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Kategori *</label>
+                        <div class="exp-kat-grid">
+                            {% set kat_ikonlar = {'Kira':'🏢','Maaş':'👥','Fatura':'⚡','Ulaşım':'🚗','Pazarlama':'📢','Yazılım':'💻','Donanım':'🖥️','Yemek':'🍽️','Diğer':'📦'} %}
+                            {% for k in kategoriler %}
+                            <label class="exp-kat-opt {{ 'exp-kat-selected' if gider and gider.kategori == k }}">
+                                <input type="radio" name="kategori" value="{{ k }}" required
+                                       {{ 'checked' if gider and gider.kategori == k }}
+                                       style="display:none;">
+                                <span class="exp-kat-ico">{{ kat_ikonlar.get(k, '📦') }}</span>
+                                <span class="exp-kat-lbl">{{ k }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Açıklama</label>
+                        <input class="input" type="text" name="aciklama" maxlength="120"
+                               value="{{ gider.aciklama if gider else '' }}"
+                               placeholder="Kısa açıklama (opsiyonel)">
+                    </div>
+
+                    <div class="field" style="margin:0;">
+                        <label class="field-lbl">Ödeme Tipi</label>
+                        <div class="pay-tip-grid">
+                            {% for t, ico in [('Nakit','💵'),('Kredi Kartı','💳'),('Havale/EFT','🏦'),('Çek','📄')] %}
+                            <label class="pay-tip-opt {{ 'pay-tip-selected' if (gider and gider.odeme_tipi == t) or (not gider and t == 'Nakit') }}">
+                                <input type="radio" name="odeme_tipi" value="{{ t }}"
+                                       {{ 'checked' if (gider and gider.odeme_tipi == t) or (not gider and t == 'Nakit') }}
+                                       style="display:none;">
+                                <span class="pay-tip-ico">{{ ico }}</span>
+                                <span class="pay-tip-lbl">{{ t }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" type="submit" style="flex:1;">
+                    {{ '💾 Güncelle' if mode=='edit' else '💸 Gideri Kaydet' }}
+                </button>
+                <a href="{{ url_for('expenses.list') }}" class="btn btn-ghost">İptal</a>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Sağ: Bilgi paneli -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+        <!-- Tutar önizleme -->
+        <div class="card">
+            <div class="card-head"><h3>Gider Özeti</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:12px;">
+                <div style="text-align:center; padding:16px 0;">
+                    <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">Gider Tutarı</div>
+                    <div id="tutarGoster" style="font-size:2rem; font-weight:800; color:var(--danger);">0.00 {{ CURRENCY }}</div>
+                </div>
+                <div class="pay-ozet-row">
+                    <span class="pay-ozet-lbl">KDV dahil mi?</span>
+                    <span class="pay-ozet-val muted">Girilen tutar kullanılır</span>
+                </div>
+                <div class="pay-ozet-row">
+                    <span class="pay-ozet-lbl">Raporlama</span>
+                    <span class="pay-ozet-val muted">Gider raporuna yansır</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kategori bilgisi -->
+        <div class="card">
+            <div class="card-head"><h3>Kategori Rehberi</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px;">
+                {% for k, ico, aciklama in [
+                    ('Kira', '🏢', 'Ofis, depo, mağaza kiraları'),
+                    ('Maaş', '👥', 'Personel ödemeleri'),
+                    ('Fatura', '⚡', 'Elektrik, su, internet'),
+                    ('Ulaşım', '🚗', 'Yakıt, ulaşım giderleri'),
+                    ('Pazarlama', '📢', 'Reklam ve tanıtım'),
+                    ('Yazılım', '💻', 'Abonelik ve lisanslar'),
+                ] %}
+                <div style="display:flex; align-items:center; gap:8px; font-size:.82rem;">
+                    <span style="font-size:1rem; width:20px;">{{ ico }}</span>
+                    <span style="font-weight:600; width:80px; color:var(--text);">{{ k }}</span>
+                    <span class="muted">{{ aciklama }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h3>İpuçları</h3></div>
+            <div class="card-pad" style="display:flex; flex-direction:column; gap:10px;">
+                <div class="pay-tip-info">
+                    <span class="pay-tip-info-ico">📊</span>
+                    <span>Giderler Kar/Zarar raporuna otomatik yansır.</span>
+                </div>
+                <div class="pay-tip-info">
+                    <span class="pay-tip-info-ico">🏷️</span>
+                    <span>Doğru kategori seçimi analiz raporlarını güçlendirir.</span>
+                </div>
+                <div class="pay-tip-info">
+                    <span class="pay-tip-info-ico">📅</span>
+                    <span>Gider tarihini fatura tarihi ile eşleştirin.</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Kategori radio seçimi
+document.querySelectorAll('.exp-kat-opt').forEach(function(lbl) {
+    lbl.addEventListener('click', function() {
+        document.querySelectorAll('.exp-kat-opt').forEach(function(l) { l.classList.remove('exp-kat-selected'); });
+        this.classList.add('exp-kat-selected');
+    });
+});
+// Ödeme tipi radio seçimi
+document.querySelectorAll('.pay-tip-opt').forEach(function(lbl) {
+    lbl.addEventListener('click', function() {
+        document.querySelectorAll('.pay-tip-opt').forEach(function(l) { l.classList.remove('pay-tip-selected'); });
+        this.classList.add('pay-tip-selected');
+    });
+});
+// Tutar önizleme
+var tutarInp = document.getElementById('tutarGider');
+var tutarGos = document.getElementById('tutarGoster');
+function updateTutar() {
+    var v = parseFloat(tutarInp.value) || 0;
+    tutarGos.textContent = v.toLocaleString('tr-TR', {minimumFractionDigits:2}) + ' {{ CURRENCY }}';
+}
+if (tutarInp) { tutarInp.addEventListener('input', updateTutar); updateTutar(); }
+</script>
+<style>
+.exp-kat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.pay-tip-grid { grid-template-columns:repeat(4,1fr); }
+@media(max-width:700px){ .exp-kat-grid{ grid-template-columns:repeat(3,1fr); } }
+.exp-kat-opt { display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 6px; border:2px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; transition:.15s; }
+.exp-kat-opt:hover { border-color:var(--primary)66; background:var(--primary)06; }
+.exp-kat-selected { border-color:var(--danger); background:#ef444410; }
+.exp-kat-ico { font-size:1.3rem; }
+.exp-kat-lbl { font-size:.7rem; font-weight:600; text-align:center; color:var(--muted); }
+.exp-kat-selected .exp-kat-lbl { color:var(--danger); }
+</style>
+{% endblock %}

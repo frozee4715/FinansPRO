@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kayıt · {{ APP_NAME }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="auth-hero">
+        <div class="hero-orb orb-1"></div>
+        <div class="hero-orb orb-2"></div>
+
+        <div class="brand">
+            <span class="brand-logo"><img src="{{ url_for('static', filename='img/logo-mark.svg') }}" alt=""></span>
+            {{ APP_NAME }}
+        </div>
+
+        <div class="hero-body">
+            <h1>Dakikalar içinde<br>aramıza katılın.</h1>
+            <p>Ücretsiz hesabınızı oluşturun ve işletmenizin muhasebesini dijitalleştirin.</p>
+
+            <div class="hero-preview">
+                <div class="hp-bar"></div>
+                <div class="hp-row">
+                    <div class="hp-mark"><img src="{{ url_for('static', filename='img/logo-mark.svg') }}" alt=""></div>
+                    <div>
+                        <div class="hp-label">Tahsilat · Bu ay</div>
+                        <div class="hp-value">₺ 132.900</div>
+                    </div>
+                    <div class="hp-trend">▲ %8,1</div>
+                </div>
+                <div class="hp-chart">
+                    <span style="--h:52%"></span>
+                    <span style="--h:40%"></span>
+                    <span style="--h:78%"></span>
+                    <span style="--h:64%"></span>
+                    <span style="--h:90%"></span>
+                    <span style="--h:70%"></span>
+                </div>
+            </div>
+
+            <ul class="auth-points">
+                <li style="--d:.1s"><span class="tick">✓</span> Sınırsız müşteri ve ürün kaydı</li>
+                <li style="--d:.25s"><span class="tick">✓</span> Otomatik fatura ve ödeme takibi</li>
+                <li style="--d:.4s"><span class="tick">✓</span> PDF çıktı ve verilerinizin şifreli saklanması</li>
+            </ul>
+        </div>
+
+        <div class="foot">© 2026 {{ APP_NAME }} · Tüm hakları saklıdır.</div>
+    </div>
+
+    <div class="auth-panel">
+        <div class="auth-card">
+            <h2>Hesap oluştur</h2>
+            <p class="sub">Bilgilerinizi girerek ücretsiz başlayın.</p>
+
+            <form method="post" action="{{ url_for('auth.register') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="field">
+                    <label>Ad Soyad</label>
+                    <input class="input" type="text" name="name" value="{{ name }}" placeholder="Adınız" required>
+                </div>
+                <div class="field">
+                    <label>E-posta</label>
+                    <input class="input" type="email" name="eposta" value="{{ eposta }}" placeholder="ornek@firma.com" required>
+                </div>
+                <div class="field">
+                    <label>Yaş</label>
+                    <input class="input" type="number" name="age" value="{{ age }}" placeholder="30" min="1" max="120" required>
+                </div>
+                <div class="field">
+                    <label>Şifre</label>
+                    <input class="input" type="password" name="parola" placeholder="En az 8 karakter" required>
+                </div>
+                <div class="field">
+                    <label>Şifre (Tekrar)</label>
+                    <input class="input" type="password" name="parola2" placeholder="Şifrenizi tekrar girin" required>
+                </div>
+                <button class="btn btn-primary btn-block" type="submit">Kayıt Ol</button>
+            </form>
+
+            <div class="auth-switch">
+                Zaten hesabınız var mı? <a href="{{ url_for('auth.login') }}">Giriş yapın</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% include 'partials/flashes.html' %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.0.3/dist/twemoji.min.js"
+        integrity="sha384-87FqG7RvL0CU7i3nP4AqSCq5NlIaF5+SNk84VJRSkTp6RvfmBvRXFjcTfCzmeHoz"
+        crossorigin="anonymous"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
+    });
+</script>
+</body>
+</html>
