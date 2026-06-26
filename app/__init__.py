@@ -177,4 +177,18 @@ def create_app(config_class=Config):
         except BuildError:
             return "#"
 
+    # Sürüm / sağlık işareti — canlıdaki kodun hangi sürüm olduğunu doğrulamak
+    # ve demo hesabının var olup olmadığını login'siz görmek için.
+    @app.route("/version")
+    def _version():
+        from flask import jsonify
+        try:
+            demo_var = bool(get_repo().get_user_by_login("demo@finanspro.com"))
+        except Exception as e:
+            demo_var = f"hata: {e}"
+        return jsonify({
+            "build": "2026-06-26-demo-fix-3670985",
+            "demo_user_var_mi": demo_var,
+        })
+
     return app
