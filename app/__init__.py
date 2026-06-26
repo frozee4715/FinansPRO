@@ -5,7 +5,10 @@ from flask import Flask, request
 
 from config import Config
 from .data.repository import init_schema, get_repo
-from .security import seed_admin, inject_user, inject_pro, generate_csrf_token, validate_csrf
+from .security import (
+    seed_admin, inject_user, inject_pro, generate_csrf_token, validate_csrf,
+    hash_password,
+)
 
 
 def create_app(config_class=Config):
@@ -61,20 +64,36 @@ def create_app(config_class=Config):
     app.register_blueprint(notifications_bp)
 
     # İlk admin kullanıcısını garanti et (uygulama başlarken)
+    import os as _os
     with app.app_context():
         seed_admin(app)
 
-    # Demo verisini garanti et: DB boşsa (yeni/ephemeral kurulum) demo hesabı
-    # ve örnek verileri otomatik kur. Mevcut veriyi ASLA silmez.
-    # DEMO_SEED=off ile kapatılabilir.
-    import os as _os
-    if _os.environ.get("DEMO_SEED", "on").lower() != "off":
-        try:
-            from seed_demo import seed_if_empty
-            if seed_if_empty():
-                app.logger.warning("Demo verisi otomatik kuruldu (DB boştu).")
-        except Exception as _e:
-            app.logger.warning("Demo otomatik tohumlama atlandı: %s", _e)
+        # 1) Demo GİRİŞ hesabını her zaman garanti et — dış dosya import'una
+        #    bağımlı DEĞİL, sadece relative import kullanır (her ortamda çalışır).
+        #    DEMO_SEED=off ile kapatılabilir.
+        if _os.environ.get("DEMO_SEED", "on").lower() != "off":
+            try:
+                repo = get_repo()
+                demo = repo.get_user_by_login("demo@finanspro.com")
+                if not demo:
+                    uid = repo.create_user(
+                        name="Demo Kullanıcı", age=30,
+                        eposta="demo@finanspro.com",
+                        parola_hash=hash_password("Demo1234"),
+                        rol="kullanici",
+                    )
+                    repo.set_user_plan(uid, "pro")
+                    app.logger.warning("Demo giriş hesabı oluşturuldu (demo@finanspro.com).")
+            except Exception as _e:
+                app.logger.warning("Demo hesabı oluşturulamadı: %s", _e)
+
+            # 2) Zengin demo verisi (müşteri/fatura/...): DB boşsa kur — en iyi çaba.
+            try:
+                from seed_demo import seed_if_empty
+                if seed_if_empty():
+                    app.logger.warning("Demo verisi otomatik kuruldu (DB boştu).")
+            except Exception as _e:
+                app.logger.warning("Demo veri tohumlama atlandı: %s", _e)
 
     # CSRF: her POST/PUT/DELETE'yi doğrula; token'ı tüm şablonlara enjekte et
     app.before_request(validate_csrf)
