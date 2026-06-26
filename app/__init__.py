@@ -15,6 +15,11 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # İstek gövdesi boyut sınırı — büyük yükleme (DoS) ve devasa görüntü/yedek
+    # gönderimlerine karşı. (fatura fotoğrafı tarayıcıda küçültülür; yedek
+    # geri yükleme yalnızca admin)
+    app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MB
+
     # Veritabanı şemasını hazırla (idempotent) ve varsayılan admini oluştur
     with app.app_context():
         init_schema(app.config["SQLITE_PATH"])
@@ -176,19 +181,5 @@ def create_app(config_class=Config):
             return url_for(endpoint, **values)
         except BuildError:
             return "#"
-
-    # Sürüm / sağlık işareti — canlıdaki kodun hangi sürüm olduğunu doğrulamak
-    # ve demo hesabının var olup olmadığını login'siz görmek için.
-    @app.route("/version")
-    def _version():
-        from flask import jsonify
-        try:
-            demo_var = bool(get_repo().get_user_by_login("demo@finanspro.com"))
-        except Exception as e:
-            demo_var = f"hata: {e}"
-        return jsonify({
-            "build": "2026-06-26-demo-fix-3670985",
-            "demo_user_var_mi": demo_var,
-        })
 
     return app

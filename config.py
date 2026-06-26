@@ -4,6 +4,7 @@ Tüm ortam ayarları burada toplanır; böylece Firebase'e geçişte
 yalnızca bu dosya ve veri katmanı (app/data) değişir.
 """
 import os
+import secrets
 from pathlib import Path
 
 try:
@@ -17,8 +18,11 @@ PROJECT_ROOT = BASE_DIR.parent
 
 
 class Config:
-    # Güvenlik — ÜRETİMDE mutlaka .env ile geçersiz kılın!
-    SECRET_KEY = os.environ.get("SECRET_KEY", "degistir-bunu-uretimde-gizli-anahtar-2026")
+    # Güvenlik — ÜRETİMDE mutlaka ortam değişkeni (SECRET_KEY) ile verin.
+    # Sabit/tahmin edilebilir bir varsayılan KULLANILMAZ: env yoksa her
+    # başlatmada rastgele üretilir (çok işçili üretimde env ŞART, aksi halde
+    # oturumlar işçiler arasında doğrulanmaz — bu da yanlış kurulumu görünür kılar).
+    SECRET_KEY = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 
     # Cookie güvenliği
     SESSION_COOKIE_HTTPONLY = True          # JS'nin cookie'ye erişimini engeller
