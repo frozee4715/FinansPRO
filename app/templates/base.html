@@ -188,6 +188,23 @@
                 }
             });
         }
+
+        // Kenar menü kaydırma konumunu sayfalar arası koru
+        // (alttaki öğelere tıklayınca menü başa dönmesin)
+        var nav = document.querySelector('.nav');
+        if (nav) {
+            var NAV_KEY = 'navScrollTop';
+            var saved = sessionStorage.getItem(NAV_KEY);
+            if (saved !== null) { nav.scrollTop = parseInt(saved, 10) || 0; }
+            nav.addEventListener('scroll', function () {
+                sessionStorage.setItem(NAV_KEY, nav.scrollTop);
+            });
+            nav.querySelectorAll('a').forEach(function (a) {
+                a.addEventListener('click', function () {
+                    sessionStorage.setItem(NAV_KEY, nav.scrollTop);
+                });
+            });
+        }
     });
 </script>
 {% block scripts %}{% endblock %}
