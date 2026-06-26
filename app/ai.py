@@ -81,6 +81,70 @@ def _ai_cagir(messages):
         return None, f"AI servisine ulaşılamadı: {e}"
 
 
+def _json_ayikla(metin):
+    """Model yanıtından JSON nesnesini ayıklar (```json çitlerini temizler)."""
+    if not metin:
+        return None
+    t = metin.strip()
+    if t.startswith("```"):
+        # ```json ... ``` veya ``` ... ```
+        t = t.split("```", 2)
+        t = t[1] if len(t) > 1 else metin
+        if t.lstrip().lower().startswith("json"):
+            t = t.lstrip()[4:]
+    # İlk { ve son } arasını al
+    bas = t.find("{")
+    son = t.rfind("}")
+    if bas == -1 or son == -1 or son < bas:
+        return None
+    try:
+        return json.loads(t[bas:son + 1])
+    except (ValueError, TypeError):
+        return None
+
+
+def vision_json(image_data_url, instruction):
+    """Görüntüyü (data URL) görüntü destekli modele gönderip JSON çıkarır.
+    (dict, hata_metni) döndürür."""
+    api_key = current_app.config.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return None, ("AI anahtarı tanımlı değil. Bu özellik için ortam "
+                      "değişkenlerine OPENROUTER_API_KEY ekleyin.")
+
+    model = (current_app.config.get("AI_VISION_MODEL")
+             or current_app.config["AI_MODEL"])
+    url = current_app.config["OPENROUTER_BASE"].rstrip("/") + "/chat/completions"
+    payload = json.dumps({
+        "model": model,
+        "temperature": 0,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": instruction},
+                {"type": "image_url", "image_url": {"url": image_data_url}},
+            ],
+        }],
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="POST")
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("X-Title", "FinansPro")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        icerik = data["choices"][0]["message"]["content"]
+    except urllib.error.HTTPError as e:
+        detay = e.read().decode("utf-8", "ignore")[:200]
+        return None, f"AI servisi hata verdi ({e.code}). {detay}"
+    except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as e:
+        return None, f"AI servisine ulaşılamadı: {e}"
+
+    parsed = _json_ayikla(icerik)
+    if parsed is None:
+        return None, "Fatura okunamadı. Daha net/düz bir fotoğraf deneyin."
+    return parsed, None
+
+
 @ai_bp.route("/")
 @pro_required
 def chat():

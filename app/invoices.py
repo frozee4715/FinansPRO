@@ -1,10 +1,66 @@
 """Fatura modülü — listele, oluştur (otomatik KDV/iskonto), detay, sil,
 teklif/proforma, e-posta gönderme."""
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from .data.repository import get_repo
 from .security import login_required
 
 invoices_bp = Blueprint("invoices", __name__, url_prefix="/faturalar")
+
+
+# ============================================================
+#  Fatura fotoğrafından okuma (AI / OCR)
+# ============================================================
+
+_FATURA_OKU_ISTEMI = (
+    "Bu bir fatura veya fiş fotoğrafı. Görüntüdeki bilgileri çıkar ve SADECE "
+    "geçerli bir JSON nesnesi döndür; JSON dışında hiçbir metin, açıklama veya "
+    "kod çiti yazma. Bulamadığın metin alanını boş string (\"\") yap. Sayısal "
+    "alanlara yalnızca rakam ve nokta koy (para birimi simgesi, virgül veya "
+    "binlik ayıracı KOYMA). Tarihleri YYYY-AA-GG biçimine çevir. KDV'yi yüzde "
+    "oranı olarak ver (örn. 20). Satıcı/firma ünvanını musteri_adi'na yaz. "
+    "Toplam birden çok kalemse en belirgin/ana kalemi kullan.\n"
+    "Beklenen JSON şeması:\n"
+    "{\n"
+    '  "fatura_no": "",\n'
+    '  "tarih": "YYYY-AA-GG",\n'
+    '  "vade_tarihi": "YYYY-AA-GG",\n'
+    '  "fatura_tipi": "Satış",\n'
+    '  "musteri_adi": "",\n'
+    '  "urun_kodu": "",\n'
+    '  "aciklama": "",\n'
+    '  "birim_fiyat": 0,\n'
+    '  "miktar": 1,\n'
+    '  "iskonto": 0,\n'
+    '  "kdv": 20\n'
+    "}"
+)
+
+
+@invoices_bp.route("/oku", methods=["POST"])
+@login_required
+def oku():
+    """Fatura fotoğrafını (data URL) AI ile okuyup form alanlarını döndürür."""
+    data = request.get_json(silent=True) or {}
+    image = (data.get("image") or "").strip()
+    if not image.startswith("data:image/"):
+        return jsonify({"ok": False, "hata": "Geçerli bir görüntü gönderilmedi."}), 400
+
+    from .ai import vision_json
+    veri, hata = vision_json(image, _FATURA_OKU_ISTEMI)
+    if hata:
+        return jsonify({"ok": False, "hata": hata}), 502
+
+    # Müşteri adını mevcut müşterilerle eşleştirmeye çalış
+    musteri_id = None
+    ad = (veri.get("musteri_adi") or "").strip().lower()
+    if ad:
+        for m in get_repo().customer_options():
+            unvan = (m["unvan"] or "").lower()
+            if unvan and (ad in unvan or unvan in ad):
+                musteri_id = m["id"]
+                break
+
+    return jsonify({"ok": True, "veri": veri, "musteri_id": musteri_id})
 
 
 @invoices_bp.route("/")

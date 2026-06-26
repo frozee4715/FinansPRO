@@ -67,6 +67,10 @@ class Config:
     OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
     OPENROUTER_BASE = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
     AI_MODEL = os.environ.get("AI_MODEL", "poolside/laguna-xs.2:free")
+    # Fatura fotoğrafı okuma için görüntü destekli (vision) model
+    AI_VISION_MODEL = os.environ.get(
+        "AI_VISION_MODEL", "meta-llama/llama-3.2-11b-vision-instruct:free"
+    )
 
     # E-posta (SMTP) — .env'de tanımlayın
     SMTP_HOST = os.environ.get("SMTP_HOST", "")
