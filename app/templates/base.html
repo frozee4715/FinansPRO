@@ -112,9 +112,6 @@
             <a href="{{ safe_url('settings.kisisellestir') }}" class="{{ 'active' if active=='kisisellestir' }}">
                 <span class="ico">🎨</span> Kişiselleştirme <span class="pro-badge">PRO</span>
             </a>
-            <a href="{{ safe_url('backup.index') }}" class="{{ 'active' if active=='backup' }}">
-                <span class="ico">☁️</span> Yedekleme <span class="pro-badge">PRO</span>
-            </a>
             <a href="{{ safe_url('destek.index') }}" class="{{ 'active' if active=='destek' }}">
                 <span class="ico">⚡</span> Destek <span class="pro-badge">PRO</span>
             </a>
@@ -122,6 +119,9 @@
 
             {% if current_user and current_user.rol == 'admin' %}
             <span class="nav-label">Yönetim</span>
+            <a href="{{ safe_url('backup.index') }}" class="{{ 'active' if active=='backup' }}">
+                <span class="ico">☁️</span> Yedekleme
+            </a>
             <a href="{{ safe_url('settings.index') }}" class="{{ 'active' if active=='settings' }}">
                 <span class="ico">⚙️</span> Ayarlar
             </a>

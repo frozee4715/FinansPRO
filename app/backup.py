@@ -8,7 +8,7 @@ from datetime import datetime
 from flask import (Blueprint, current_app, flash, redirect, render_template,
                    request, send_file, session, url_for)
 
-from .security import pro_required
+from .security import admin_required
 
 backup_bp = Blueprint("backup", __name__, url_prefix="/yedekleme")
 
@@ -85,13 +85,13 @@ def _list_backups():
 # ── Rotalar ──────────────────────────────────────────────────────────────────
 
 @backup_bp.route("/")
-@pro_required
+@admin_required
 def index():
     return render_template("backup/index.html", yedekler=_list_backups())
 
 
 @backup_bp.route("/olustur", methods=["POST"])
-@pro_required
+@admin_required
 def olustur():
     db_path = current_app.config["SQLITE_PATH"]
     if not os.path.exists(db_path):
@@ -115,7 +115,7 @@ def olustur():
 
 
 @backup_bp.route("/indir/<filename>")
-@pro_required
+@admin_required
 def indir(filename):
     if ".." in filename or "/" in filename or "\\" in filename:
         flash("Geçersiz dosya adı.", "danger")
@@ -128,7 +128,7 @@ def indir(filename):
 
 
 @backup_bp.route("/geri-yukle", methods=["POST"])
-@pro_required
+@admin_required
 def geri_yukle():
     dosya = request.files.get("yedek_dosya")
     if not dosya or not dosya.filename:
@@ -183,7 +183,7 @@ def geri_yukle():
 
 
 @backup_bp.route("/sil/<filename>", methods=["POST"])
-@pro_required
+@admin_required
 def sil(filename):
     if ".." in filename or "/" in filename or "\\" in filename:
         flash("Geçersiz dosya adı.", "danger")
