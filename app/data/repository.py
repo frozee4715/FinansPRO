@@ -243,6 +243,9 @@ class SqliteRepository:
     def delete_user(self, user_id):
         self._exec("DELETE FROM users WHERE id = ?", (user_id,))
 
+    def set_user_password(self, user_id, parola_hash):
+        self._exec("UPDATE users SET parola_hash = ? WHERE id = ?", (parola_hash, user_id))
+
     # ----- Giriş güvenliği (kilitleme) ---------------------------------
     def register_failed_login(self, user_id, max_attempts, lockout_minutes):
         """Başarısız giriş sayar; eşiği aşınca hesabı kilitler.

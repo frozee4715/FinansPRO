@@ -107,6 +107,12 @@ def admin_required(view):
         if session.get("user_role") != "admin":
             flash("Bu alana yalnızca yöneticiler erişebilir.", "danger")
             return redirect(url_for("main.dashboard"))
+        # IP allowlist (ADMIN_IP_WHITELIST tanımlıysa)
+        if not admin_ip_allowed():
+            current_app.logger.warning(
+                "Admin paneline izinsiz IP erişimi engellendi: %s", _client_ip()
+            )
+            abort(403)
         return view(*args, **kwargs)
     return wrapped
 
@@ -143,22 +149,99 @@ def pro_required(view):
 
 # ----- İlk admin tohumu -----------------------------------------------
 def seed_admin(app):
-    """Web ile giriş yapılabilecek bir admin hesabı yoksa oluşturur."""
+    """Ortam değişkenlerine göre admin hesabını oluşturur VEYA senkronlar.
+
+    Kimlik bilgileri SADECE ortam değişkenlerinden alınır; sabit/varsayılan
+    şifre KULLANILMAZ.
+
+    - ADMIN_EMAIL tanımlı değilse hiçbir şey yapılmaz.
+    - O e-postayla admin yoksa oluşturulur (ADMIN_PASSWORD yoksa rastgele
+      güçlü şifre üretilir ve bir kez loglanır).
+    - Admin ZATEN varsa ve ADMIN_PASSWORD verilmişse, şifre env değeriyle
+      SENKRONLANIR (güncellenir), rol 'admin' yapılır, hesap aktifleştirilir
+      ve giriş kilidi sıfırlanır. Böylece "Variables'tan şifreyi değiştirdim
+      ama giriş yapamıyorum" sorunu ortadan kalkar.
+
+    NOT: Admin şifresi env ile yönetildiğinden, şifreyi uygulama içinden
+    değiştirirsen sonraki deploy'da env değerine geri döner. Admin şifresini
+    Railway Variables üzerinden yönet.
+    """
     import os
+    import secrets
     repo = get_repo()
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@finanspro.com")
-    admin_pass  = os.environ.get("ADMIN_PASSWORD", "Admin1234")
-    if not repo.email_exists(admin_email):
-        repo.create_user(
-            name="Admin",
-            age=18,
-            eposta=admin_email,
-            parola_hash=hash_password(admin_pass),
-            rol="admin",
+    admin_email = (os.environ.get("ADMIN_EMAIL") or "").strip().lower()
+    admin_pass  = os.environ.get("ADMIN_PASSWORD")
+
+    if not admin_email:
+        app.logger.info(
+            "ADMIN_EMAIL tanımlı değil; admin hesabı oluşturulmadı/senkronlanmadı."
         )
+        return
+
+    mevcut = repo.get_user_by_login(admin_email)
+
+    if mevcut:
+        # Hesabı admin + aktif yap, kilidi aç
+        if mevcut.get("rol") != "admin":
+            repo.update_user_role(mevcut["id"], "admin")
+        repo.set_user_active(mevcut["id"], True)
+        repo.reset_login_state(mevcut["id"])
+        if admin_pass:
+            repo.set_user_password(mevcut["id"], hash_password(admin_pass))
+            app.logger.warning(
+                "Admin hesabı (%s) şifresi ortam değişkeniyle SENKRONLANDI.",
+                admin_email,
+            )
+        else:
+            app.logger.info(
+                "Admin hesabı (%s) mevcut; ADMIN_PASSWORD verilmediği için "
+                "şifre değiştirilmedi.", admin_email,
+            )
+        return
+
+    # Hesap yok → oluştur
+    generated = False
+    if not admin_pass:
+        admin_pass = secrets.token_urlsafe(16)
+        generated = True
+
+    repo.create_user(
+        name="Admin",
+        age=18,
+        eposta=admin_email,
+        parola_hash=hash_password(admin_pass),
+        rol="admin",
+    )
+
+    if generated:
         app.logger.warning(
-            "Varsayılan admin hesabı oluşturuldu (%s). "
-            "Lütfen .env dosyasına ADMIN_EMAIL ve ADMIN_PASSWORD ekleyin "
-            "ve ilk girişten sonra şifreyi değiştirin!",
+            "Admin hesabı (%s) RASTGELE şifreyle oluşturuldu. "
+            "Tek seferlik şifre: %s — hemen giriş yapıp değiştirin "
+            "ve ADMIN_PASSWORD ortam değişkenini ayarlayın.",
+            admin_email, admin_pass,
+        )
+    else:
+        app.logger.warning(
+            "Admin hesabı (%s) ortam değişkenlerindeki şifreyle oluşturuldu.",
             admin_email,
         )
+
+
+# ----- Admin IP allowlist ---------------------------------------------
+def _client_ip():
+    """Gerçek istemci IP'si (Railway gibi proxy arkasında X-Forwarded-For)."""
+    fwd = request.headers.get("X-Forwarded-For", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.remote_addr or ""
+
+
+def admin_ip_allowed():
+    """ADMIN_IP_WHITELIST boşsa herkese (şifreyle) açık; doluysa yalnızca
+    listedeki IP'ler admin paneline erişebilir."""
+    import os
+    raw = (os.environ.get("ADMIN_IP_WHITELIST") or "").strip()
+    if not raw:
+        return True
+    izinli = {ip.strip() for ip in raw.split(",") if ip.strip()}
+    return _client_ip() in izinli
