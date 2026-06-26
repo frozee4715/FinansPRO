@@ -63,27 +63,25 @@ def compute_invoice(base, iskonto, kdv):
     return ara, isk, kdv_t, toplam
 
 
-def seed():
-    init_schema(DB_PATH)
-    repo = SqliteRepository(DB_PATH)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+def _ensure_demo_user(repo):
+    """Demo kullanıcısını (Pro) garanti eder; id döndürür."""
+    mevcut = repo.get_user_by_login(DEMO_EMAIL)
+    if mevcut:
+        uid = mevcut["id"]
+    else:
+        uid = repo.create_user(
+            name="Demo Kullanıcı",
+            age=30,
+            eposta=DEMO_EMAIL,
+            parola_hash=generate_password_hash(DEMO_PASS),
+            rol="kullanici",
+        )
+    repo.set_user_plan(uid, "pro")
+    return uid
 
-    print(f"DB: {DB_PATH}")
-    wipe(conn)
-    print("• Eski veriler temizlendi.")
 
-    # --- Demo kullanıcısı (Pro) -------------------------------------------
-    repo.create_user(
-        name="Demo Kullanıcı",
-        age=30,
-        eposta=DEMO_EMAIL,
-        parola_hash=generate_password_hash(DEMO_PASS),
-        rol="kullanici",
-    )
-    repo.set_user_plan(1, "pro")
-    print(f"• Demo hesabı: {DEMO_EMAIL} / {DEMO_PASS} (Pro)")
-
+def populate(repo, conn):
+    """İş verisini (ayarlar, müşteri, ürün, fatura, ...) ekler. Silme YAPMAZ."""
     # --- Şirket / marka ayarları ------------------------------------------
     repo.set_setting("sirket_adi", "FinansPro Demo Ticaret A.Ş.")
     repo.set_setting("vergi_no", "1234567890")
@@ -226,10 +224,50 @@ def seed():
         repo.create_check(tur=tur, taraf=taraf, tutar=tutar, vade_tarihi=vade, durum=durum, notlar=notlar)
     print(f"• {len(cekler)} çek/senet eklendi.")
 
+
+def _has_business_data(conn):
+    """DB'de zaten iş verisi (müşteri) var mı?"""
+    try:
+        return conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0] > 0
+    except sqlite3.OperationalError:
+        return False
+
+
+def seed():
+    """ELLE tam sıfırlama: tüm veriyi siler, demo hesabı + zengin demo veri kurar."""
+    init_schema(DB_PATH)
+    repo = SqliteRepository(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    print(f"DB: {DB_PATH}")
+    wipe(conn)
+    print("• Eski veriler temizlendi.")
+    _ensure_demo_user(repo)
+    print(f"• Demo hesabı: {DEMO_EMAIL} / {DEMO_PASS} (Pro)")
+    populate(repo, conn)
     conn.close()
     print("\n[OK] Demo veritabanı hazır.")
     print(f"   Giriş: {DEMO_EMAIL}  |  Şifre: {DEMO_PASS}")
     print("   Admin: yalnızca ADMIN_EMAIL/ADMIN_PASSWORD ayarlıysa açılışta oluşur.")
+
+
+def seed_if_empty():
+    """AÇILIŞTA güvenli tohumlama: yalnızca DB'de iş verisi yoksa demo veriyi
+    kurar. Mevcut veriyi ASLA silmez. Demo hesabını her durumda garanti eder.
+    Tohumlama yapıldıysa True döner."""
+    init_schema(DB_PATH)
+    repo = SqliteRepository(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        _ensure_demo_user(repo)
+        if _has_business_data(conn):
+            return False
+        populate(repo, conn)
+        return True
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

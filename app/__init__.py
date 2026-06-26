@@ -64,6 +64,18 @@ def create_app(config_class=Config):
     with app.app_context():
         seed_admin(app)
 
+    # Demo verisini garanti et: DB boşsa (yeni/ephemeral kurulum) demo hesabı
+    # ve örnek verileri otomatik kur. Mevcut veriyi ASLA silmez.
+    # DEMO_SEED=off ile kapatılabilir.
+    import os as _os
+    if _os.environ.get("DEMO_SEED", "on").lower() != "off":
+        try:
+            from seed_demo import seed_if_empty
+            if seed_if_empty():
+                app.logger.warning("Demo verisi otomatik kuruldu (DB boştu).")
+        except Exception as _e:
+            app.logger.warning("Demo otomatik tohumlama atlandı: %s", _e)
+
     # CSRF: her POST/PUT/DELETE'yi doğrula; token'ı tüm şablonlara enjekte et
     app.before_request(validate_csrf)
     app.jinja_env.globals["csrf_token"] = generate_csrf_token
