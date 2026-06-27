@@ -70,7 +70,7 @@ def _isletme_ozeti(repo):
 
 def _sistem_istemi(repo):
     return (
-        "Sen FinansPro adlı Türk muhasebe yazılımının yapay zekâ asistanısın. "
+        "Sen MuhasebePRO adlı Türk muhasebe yazılımının yapay zekâ asistanısın. "
         "Kullanıcıya kısa, net ve Türkçe yanıt ver. Finans, muhasebe, KDV, nakit "
         "akışı ve tahsilat konularında pratik öneriler sun. Sayısal soruları "
         "aşağıdaki güncel verilere dayanarak yanıtla; veri yoksa varsayım yapma, "
@@ -79,31 +79,63 @@ def _sistem_istemi(repo):
     )
 
 
+def _or_keys():
+    """Sırasıyla denenecek OpenRouter anahtarları: önce birincil, sonra yedek."""
+    keys = []
+    for ad in ("OPENROUTER_API_KEY", "OPENROUTER_API_KEY_BACKUP"):
+        k = current_app.config.get(ad)
+        if k:
+            keys.append(k)
+    return keys
+
+
+def _or_post(payload_dict, timeout):
+    """OpenRouter'a POST eder; birincil anahtar limit/kota verince yedeğe geçer.
+    (yanıt_json, hata) döndürür."""
+    keys = _or_keys()
+    if not keys:
+        return None, ("AI anahtarı tanımlı değil. Ortam değişkenlerine "
+                      "OPENROUTER_API_KEY ekleyin.")
+    url = current_app.config["OPENROUTER_BASE"].rstrip("/") + "/chat/completions"
+    body = json.dumps(payload_dict).encode("utf-8")
+    son_hata = None
+    for i, key in enumerate(keys):
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Authorization", f"Bearer {key}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("X-Title", "MuhasebePRO")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8")), None
+        except urllib.error.HTTPError as e:
+            detay = e.read().decode("utf-8", "ignore")[:200]
+            son_hata = f"AI servisi hata verdi ({e.code}). {detay}"
+            # 401/402 (yetki/kota) veya 429 (limit) → varsa yedek anahtarı dene
+            if e.code in (401, 402, 429) and i < len(keys) - 1:
+                continue
+            return None, son_hata
+        except (urllib.error.URLError, ValueError, TimeoutError) as e:
+            son_hata = f"AI servisine ulaşılamadı: {e}"
+            if i < len(keys) - 1:    # ağ hatasında da yedeği dene
+                continue
+            return None, son_hata
+    return None, son_hata
+
+
 def _ai_cagir(messages):
     """OpenRouter sohbet tamamlama çağrısı. (yanıt_metni, hata) döndürür."""
-    api_key = current_app.config.get("OPENROUTER_API_KEY")
-    if not api_key:
-        return None, "AI anahtarı tanımlı değil. web/.env içine OPENROUTER_API_KEY ekleyin."
-
-    url = current_app.config["OPENROUTER_BASE"].rstrip("/") + "/chat/completions"
-    payload = json.dumps({
+    data, hata = _or_post({
         "model": current_app.config["AI_MODEL"],
         "messages": messages,
         "max_tokens": current_app.config.get("AI_MAX_TOKENS", 600),
-    }).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, method="POST")
-    req.add_header("Authorization", f"Bearer {api_key}")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("X-Title", "FinansPro")
+        "reasoning": {"enabled": True},
+    }, timeout=60)
+    if hata:
+        return None, hata
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"], None
-    except urllib.error.HTTPError as e:
-        detay = e.read().decode("utf-8", "ignore")[:200]
-        return None, f"AI servisi hata verdi ({e.code}). {detay}"
-    except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as e:
-        return None, f"AI servisine ulaşılamadı: {e}"
+    except (KeyError, IndexError, TypeError):
+        return None, "AI yanıtı çözümlenemedi."
 
 
 def _json_ayikla(metin):
@@ -131,15 +163,13 @@ def _json_ayikla(metin):
 def vision_json(image_data_url, instruction):
     """Görüntüyü (data URL) görüntü destekli modele gönderip JSON çıkarır.
     (dict, hata_metni) döndürür."""
-    api_key = current_app.config.get("OPENROUTER_API_KEY")
-    if not api_key:
+    if not _or_keys():
         return None, ("AI anahtarı tanımlı değil. Bu özellik için ortam "
                       "değişkenlerine OPENROUTER_API_KEY ekleyin.")
 
     model = (current_app.config.get("AI_VISION_MODEL")
              or current_app.config["AI_MODEL"])
-    url = current_app.config["OPENROUTER_BASE"].rstrip("/") + "/chat/completions"
-    payload = json.dumps({
+    data, hata = _or_post({
         "model": model,
         "temperature": 0,
         "max_tokens": 700,
@@ -150,20 +180,13 @@ def vision_json(image_data_url, instruction):
                 {"type": "image_url", "image_url": {"url": image_data_url}},
             ],
         }],
-    }).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, method="POST")
-    req.add_header("Authorization", f"Bearer {api_key}")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("X-Title", "FinansPro")
+    }, timeout=90)
+    if hata:
+        return None, hata
     try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
         icerik = data["choices"][0]["message"]["content"]
-    except urllib.error.HTTPError as e:
-        detay = e.read().decode("utf-8", "ignore")[:200]
-        return None, f"AI servisi hata verdi ({e.code}). {detay}"
-    except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as e:
-        return None, f"AI servisine ulaşılamadı: {e}"
+    except (KeyError, IndexError, TypeError):
+        return None, "AI yanıtı çözümlenemedi."
 
     parsed = _json_ayikla(icerik)
     if parsed is None:
@@ -175,7 +198,7 @@ def vision_json(image_data_url, instruction):
 @pro_required
 def chat():
     gecmis = session.get("ai_chat", [])
-    anahtar_var = bool(current_app.config.get("OPENROUTER_API_KEY"))
+    anahtar_var = bool(_or_keys())
     return render_template("ai/chat.html", gecmis=gecmis,
                            anahtar_var=anahtar_var,
                            model=current_app.config["AI_MODEL"])

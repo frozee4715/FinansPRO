@@ -77,8 +77,10 @@ class Config:
 
     # Yapay zekâ (OpenRouter) — anahtar ortam değişkeninden / .env'den okunur
     OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+    # Yedek anahtar: birincisi limit/kota dolduğunda otomatik devreye girer
+    OPENROUTER_API_KEY_BACKUP = os.environ.get("OPENROUTER_API_KEY_BACKUP", "")
     OPENROUTER_BASE = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
-    AI_MODEL = os.environ.get("AI_MODEL", "poolside/laguna-xs.2:free")
+    AI_MODEL = os.environ.get("AI_MODEL", "google/gemma-4-31b-it:free")
     # Fatura fotoğrafı okuma için görüntü destekli (vision) model
     AI_VISION_MODEL = os.environ.get(
         "AI_VISION_MODEL", "meta-llama/llama-3.2-11b-vision-instruct:free"
