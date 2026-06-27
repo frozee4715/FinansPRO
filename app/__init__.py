@@ -22,7 +22,7 @@ def create_app(config_class=Config):
 
     # Veritabanı şemasını hazırla (idempotent) ve varsayılan admini oluştur
     with app.app_context():
-        init_schema(app.config["SQLITE_PATH"])
+        init_schema(app.config)
 
     # Blueprint'ler
     from .auth.routes import auth_bp

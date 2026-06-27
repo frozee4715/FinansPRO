@@ -33,6 +33,14 @@ class Config:
     # Veri kaynağı: "sqlite" (şimdilik) | "firebase" (geçiş sonrası)
     DATA_BACKEND = os.environ.get("DATA_BACKEND", "sqlite")
 
+    # PostgreSQL — Railway eklentisi DATABASE_URL ortam değişkenini otomatik verir.
+    # Doluysa uygulama Postgres kullanır; boşsa SQLite'a düşer (lokal geliştirme).
+    # Railway bazen "postgres://" verir; psycopg "postgresql://" ister → normalize.
+    _db_url = os.environ.get("DATABASE_URL", "")
+    if _db_url.startswith("postgres://"):
+        _db_url = "postgresql://" + _db_url[len("postgres://"):]
+    DATABASE_URL = _db_url
+
     # SQLite — mevcut emuhasebe.db dosyasını kullanır (proje kökünde)
     SQLITE_PATH = os.environ.get("SQLITE_PATH", str(PROJECT_ROOT / "emuhasebe.db"))
 

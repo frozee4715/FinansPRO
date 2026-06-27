@@ -3,3 +3,4 @@ Werkzeug>=3.0
 python-dotenv>=1.0
 firebase-admin>=6.5
 gunicorn>=21.2
+psycopg[binary]>=3.1

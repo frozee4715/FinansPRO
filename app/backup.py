@@ -93,6 +93,11 @@ def index():
 @backup_bp.route("/olustur", methods=["POST"])
 @admin_required
 def olustur():
+    if current_app.config.get("DATABASE_URL"):
+        flash("Dosya tabanlı yedekleme yalnızca SQLite içindir. Üretimde veritabanı "
+              "(PostgreSQL) sağlayıcı tarafından yönetilir ve yedeklenir.", "info")
+        return redirect(url_for("backup.index"))
+
     db_path = current_app.config["SQLITE_PATH"]
     if not os.path.exists(db_path):
         flash("Veritabanı dosyası bulunamadı.", "danger")
@@ -130,6 +135,11 @@ def indir(filename):
 @backup_bp.route("/geri-yukle", methods=["POST"])
 @admin_required
 def geri_yukle():
+    if current_app.config.get("DATABASE_URL"):
+        flash("Üretimde (PostgreSQL) dosyadan geri yükleme devre dışıdır; veri "
+              "kaybını önlemek için sağlayıcının yedek/geri-yükleme aracını kullanın.", "info")
+        return redirect(url_for("backup.index"))
+
     dosya = request.files.get("yedek_dosya")
     if not dosya or not dosya.filename:
         flash("Dosya seçilmedi.", "danger")

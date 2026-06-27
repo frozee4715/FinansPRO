@@ -5,80 +5,216 @@ Tek bir arayüz (SqliteRepository) tüm CRUD işlemlerini sağlar. Firebase'e
 geçişte aynı metod imzalarına sahip FirebaseRepository yazılır ve
 get_repo() onu döndürür.
 """
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from flask import current_app, g
+
+try:
+    import psycopg                          # PostgreSQL sürücüsü (production)
+except ImportError:                         # lokal geliştirmede gerekmeyebilir
+    psycopg = None
+
+
+# ===========================================================================
+# Dialect katmanı — aynı kod hem SQLite (lokal) hem PostgreSQL (production)
+# ---------------------------------------------------------------------------
+# DATABASE_URL doluysa Postgres, boşsa SQLite kullanılır. SQLite '?' ve ':isim'
+# placeholder'larını psycopg'nin '%s' / '%(isim)s' biçimine çeviririz; satırlar
+# sqlite3.Row gibi hem indeks (row[0]) hem anahtar (row['kol']) erişimi sunar.
+# ===========================================================================
+# ':isim' yakalar ama '::date' cast'ine dokunmaz (lookbehind ile).
+_NAMED_RE = re.compile(r"(?<!:):(\w+)")
+
+
+def _translate(sql):
+    """SQLite placeholder'larını psycopg biçimine çevirir."""
+    sql = _NAMED_RE.sub(r"%(\1)s", sql)     # :isim  -> %(isim)s
+    sql = sql.replace("?", "%s")            # ?      -> %s
+    return sql
+
+
+class _Row:
+    """Hem indeks hem anahtar erişimli satır (sqlite3.Row taklidi)."""
+    __slots__ = ("_m", "_v")
+
+    def __init__(self, cols, vals):
+        self._v = tuple(vals)
+        self._m = {c: i for i, c in enumerate(cols)}
+
+    def __getitem__(self, k):
+        return self._v[k] if isinstance(k, int) else self._v[self._m[k]]
+
+    def get(self, k, d=None):
+        i = self._m.get(k)
+        return self._v[i] if i is not None else d
+
+    def keys(self):
+        return list(self._m.keys())
+
+    def __iter__(self):
+        return iter(self._v)
+
+    def __len__(self):
+        return len(self._v)
+
+
+def _pg_rowf(cur):
+    cols = [d.name for d in (cur.description or [])]
+
+    def make(vals):
+        return _Row(cols, vals)
+    return make
+
+
+class _PgCursor:
+    """psycopg cursor'ı sqlite3 alışkanlıklarına uyarlar (?, fetchone vb.)."""
+    def __init__(self, cur):
+        self._c = cur
+
+    @property
+    def lastrowid(self):                    # Postgres'te RETURNING kullanılır
+        return None
+
+    def execute(self, sql, params=None):
+        self._c.execute(_translate(sql), params)
+        return self
+
+    def fetchone(self):
+        return self._c.fetchone()
+
+    def fetchall(self):
+        return self._c.fetchall()
+
+    def close(self):
+        self._c.close()
+
+
+class _PgConn:
+    """psycopg connection'ı sqlite3 Connection arayüzüne benzetir."""
+    def __init__(self, raw):
+        self._raw = raw
+
+    def execute(self, sql, params=None):
+        cur = self._raw.cursor()
+        cur.execute(_translate(sql), params)
+        return cur                          # psycopg cursor fetchone/fetchall destekler
+
+    def cursor(self):
+        return _PgCursor(self._raw.cursor())
+
+    def commit(self):
+        self._raw.commit()
+
+    def rollback(self):
+        self._raw.rollback()
+
+    def close(self):
+        self._raw.close()
 
 
 # ---------------------------------------------------------------------------
 # Bağlantı yönetimi
 # ---------------------------------------------------------------------------
-def _connect(path):
+def _connect(url, path):
+    if url:
+        if psycopg is None:
+            raise RuntimeError("psycopg kurulu değil ama DATABASE_URL verilmiş.")
+        raw = psycopg.connect(url, row_factory=_pg_rowf, autocommit=False)
+        return _PgConn(raw)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row          # sözlük benzeri satır erişimi
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
+def _ddl(sql, is_pg):
+    """Şema (DDL) ifadesini hedef motora uyarlar."""
+    if not is_pg:
+        return sql
+    sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    sql = sql.replace("DEFAULT CURRENT_TIMESTAMP", "DEFAULT (now()::text)")
+    return sql
+
+
+def _is_integrity_error(e):
+    """Hata bir bütünlük (FK/UNIQUE) ihlali mi? İki motoru da kapsar."""
+    if isinstance(e, sqlite3.IntegrityError):
+        return True
+    if psycopg is not None and isinstance(e, psycopg.IntegrityError):
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Şema kurulumu / göçü
 # ---------------------------------------------------------------------------
-def init_schema(path):
-    """Tabloları ve web için gereken yeni sütunları oluşturur (idempotent)."""
-    conn = _connect(path)
+def init_schema(cfg):
+    """Tabloları ve web için gereken yeni sütunları oluşturur (idempotent).
+
+    cfg: app.config benzeri; DATABASE_URL (varsa Postgres) ve SQLITE_PATH içerir.
+    """
+    url = cfg.get("DATABASE_URL", "")
+    path = cfg["SQLITE_PATH"]
+    is_pg = bool(url)
+    conn = _connect(url, path)
     cur = conn.cursor()
 
+    def ddl(sql):
+        cur.execute(_ddl(sql, is_pg))
+
     # Mevcut CLI tablolarıyla uyumlu temel tablolar
-    cur.execute("""CREATE TABLE IF NOT EXISTS users(
+    ddl("""CREATE TABLE IF NOT EXISTS users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT, age INTEGER, eposta TEXT, sifre TEXT, yetki TEXT)""")
-    cur.execute("""CREATE TABLE IF NOT EXISTS customers(
+    ddl("""CREATE TABLE IF NOT EXISTS customers(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         unvan TEXT, vergi_no TEXT, adres TEXT, telefon TEXT, eposta TEXT)""")
-    cur.execute("""CREATE TABLE IF NOT EXISTS products(
+    ddl("""CREATE TABLE IF NOT EXISTS products(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT, aciklama TEXT, birim_fiyat REAL, stok INTEGER)""")
-    cur.execute("""CREATE TABLE IF NOT EXISTS invoices(
+    # invoices: 'Birim_Fiyat' büyük harfli → iki motorda da aynı kalsın diye tırnaklı
+    ddl("""CREATE TABLE IF NOT EXISTS invoices(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         musteri_id INTEGER, fatura_no TEXT, tarih TEXT, urun_kodu TEXT,
-        acıklama TEXT, Birim_Fiyat REAL, iskonto REAL, kdv REAL,
+        acıklama TEXT, "Birim_Fiyat" REAL, iskonto REAL, kdv REAL,
         ara_toplam REAL, iskonto_tutarı REAL, kdv_tutarı REAL,
         toplam_tutar REAL, fatura_tipi TEXT, vade_tarihi TEXT,
         FOREIGN KEY(musteri_id) REFERENCES customers(id))""")
-    cur.execute("""CREATE TABLE IF NOT EXISTS payments(
+    ddl("""CREATE TABLE IF NOT EXISTS payments(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fatura_id INTEGER, odeme_tarihi TEXT, tutar REAL, odeme_tipi TEXT,
         FOREIGN KEY(fatura_id) REFERENCES invoices(id))""")
 
     # Giderler / masraflar
-    cur.execute("""CREATE TABLE IF NOT EXISTS expenses(
+    ddl("""CREATE TABLE IF NOT EXISTS expenses(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tarih TEXT, kategori TEXT, aciklama TEXT, tutar REAL, odeme_tipi TEXT,
         olusturulma TEXT)""")
 
     # Uygulama ayarları (anahtar/değer) — şirket bilgisi, plan, vb.
-    cur.execute("""CREATE TABLE IF NOT EXISTS settings(
+    ddl("""CREATE TABLE IF NOT EXISTS settings(
         anahtar TEXT PRIMARY KEY, deger TEXT)""")
 
     # Destek talepleri
-    cur.execute("""CREATE TABLE IF NOT EXISTS destek_talepleri(
+    ddl("""CREATE TABLE IF NOT EXISTS destek_talepleri(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER, konu TEXT, mesaj TEXT,
         durum TEXT DEFAULT 'acik',
         olusturma TEXT DEFAULT CURRENT_TIMESTAMP)""")
 
     # Tedarikçiler
-    cur.execute("""CREATE TABLE IF NOT EXISTS tedarikcilar(
+    ddl("""CREATE TABLE IF NOT EXISTS tedarikcilar(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         unvan TEXT, vergi_no TEXT, adres TEXT, telefon TEXT,
         eposta TEXT, notlar TEXT, olusturulma TEXT)""")
 
     # Kasa / Banka hesapları
-    cur.execute("""CREATE TABLE IF NOT EXISTS hesaplar(
+    ddl("""CREATE TABLE IF NOT EXISTS hesaplar(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ad TEXT, tur TEXT, para_birimi TEXT DEFAULT '₺',
         bakiye_baslangic REAL DEFAULT 0, aciklama TEXT, aktif INTEGER DEFAULT 1)""")
-    cur.execute("""CREATE TABLE IF NOT EXISTS hesap_hareketleri(
+    ddl("""CREATE TABLE IF NOT EXISTS hesap_hareketleri(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         hesap_id INTEGER, tarih TEXT, aciklama TEXT,
         tutar REAL, tip TEXT, referans TEXT,
@@ -86,35 +222,35 @@ def init_schema(path):
         FOREIGN KEY(hesap_id) REFERENCES hesaplar(id))""")
 
     # Çek / Senet
-    cur.execute("""CREATE TABLE IF NOT EXISTS cek_senet(
+    ddl("""CREATE TABLE IF NOT EXISTS cek_senet(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tur TEXT, taraf TEXT, tutar REAL,
         vade_tarihi TEXT, durum TEXT DEFAULT 'Beklemede',
         notlar TEXT, olusturulma TEXT)""")
 
     # Stok hareketleri
-    cur.execute("""CREATE TABLE IF NOT EXISTS stok_hareketleri(
+    ddl("""CREATE TABLE IF NOT EXISTS stok_hareketleri(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         urun_id INTEGER, tur TEXT, miktar INTEGER,
         aciklama TEXT, referans TEXT, olusturulma TEXT,
         FOREIGN KEY(urun_id) REFERENCES products(id))""")
 
     # Bütçe
-    cur.execute("""CREATE TABLE IF NOT EXISTS butce(
+    ddl("""CREATE TABLE IF NOT EXISTS butce(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         yil INTEGER, ay INTEGER, kategori TEXT,
         hedef_tutar REAL,
         UNIQUE(yil, ay, kategori))""")
 
     # Denetim kaydı
-    cur.execute("""CREATE TABLE IF NOT EXISTS audit_log(
+    ddl("""CREATE TABLE IF NOT EXISTS audit_log(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         kullanici_id INTEGER, kullanici_adi TEXT,
         islem TEXT, tablo TEXT, kayit_id INTEGER,
         detay TEXT, tarih TEXT)""")
 
     # Tekrarlayan faturalar
-    cur.execute("""CREATE TABLE IF NOT EXISTS tekrarlayan_faturalar(
+    ddl("""CREATE TABLE IF NOT EXISTS tekrarlayan_faturalar(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         musteri_id INTEGER, aciklama TEXT, tutar REAL,
         kdv REAL DEFAULT 20, periyot TEXT,
@@ -122,7 +258,7 @@ def init_schema(path):
         olusturulma TEXT)""")
 
     # Gönderilen bildirim kaydı (tekrar gönderimi önler)
-    cur.execute("""CREATE TABLE IF NOT EXISTS bildirim_log(
+    ddl("""CREATE TABLE IF NOT EXISTS bildirim_log(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         tip TEXT NOT NULL,
@@ -131,7 +267,7 @@ def init_schema(path):
         UNIQUE(user_id, tip, referans))""")
 
     # FCM Push bildirim token'ları
-    cur.execute("""CREATE TABLE IF NOT EXISTS fcm_tokens(
+    ddl("""CREATE TABLE IF NOT EXISTS fcm_tokens(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         token TEXT NOT NULL UNIQUE,
@@ -139,30 +275,34 @@ def init_schema(path):
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)""")
 
     # AI yanıt önbelleği (token tasarrufu): aynı soru + aynı veri → API'ye gitmez
-    cur.execute("""CREATE TABLE IF NOT EXISTS ai_cache(
+    ddl("""CREATE TABLE IF NOT EXISTS ai_cache(
         soru_hash TEXT PRIMARY KEY,
         soru TEXT, cevap TEXT, olusturma TEXT)""")
 
     # Web için users tablosuna eklenen sütunlar (varsa atlar)
-    _add_column(cur, "users", "parola_hash", "TEXT")
-    _add_column(cur, "users", "rol", "TEXT DEFAULT 'kullanici'")
-    _add_column(cur, "users", "aktif", "INTEGER DEFAULT 1")
-    _add_column(cur, "users", "basarisiz_giris", "INTEGER DEFAULT 0")
-    _add_column(cur, "users", "kilit_bitis", "TEXT")
-    _add_column(cur, "users", "olusturulma", "TEXT")
-    _add_column(cur, "users", "son_giris", "TEXT")
-    _add_column(cur, "users", "plan", "TEXT DEFAULT 'free'")
+    _add_column(cur, "users", "parola_hash", "TEXT", is_pg)
+    _add_column(cur, "users", "rol", "TEXT DEFAULT 'kullanici'", is_pg)
+    _add_column(cur, "users", "aktif", "INTEGER DEFAULT 1", is_pg)
+    _add_column(cur, "users", "basarisiz_giris", "INTEGER DEFAULT 0", is_pg)
+    _add_column(cur, "users", "kilit_bitis", "TEXT", is_pg)
+    _add_column(cur, "users", "olusturulma", "TEXT", is_pg)
+    _add_column(cur, "users", "son_giris", "TEXT", is_pg)
+    _add_column(cur, "users", "plan", "TEXT DEFAULT 'free'", is_pg)
 
     # Mevcut tablolara yeni sütunlar
-    _add_column(cur, "products", "kategori", "TEXT DEFAULT ''")
-    _add_column(cur, "invoices", "tur", "TEXT DEFAULT 'Fatura'")
-    _add_column(cur, "invoices", "gecerlilik_tarihi", "TEXT")
+    _add_column(cur, "products", "kategori", "TEXT DEFAULT ''", is_pg)
+    _add_column(cur, "invoices", "tur", "TEXT DEFAULT 'Fatura'", is_pg)
+    _add_column(cur, "invoices", "gecerlilik_tarihi", "TEXT", is_pg)
 
     conn.commit()
     conn.close()
 
 
-def _add_column(cur, table, column, decl):
+def _add_column(cur, table, column, decl, is_pg):
+    if is_pg:
+        # Postgres: IF NOT EXISTS yerleşik → istisnaya gerek yok
+        cur.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {decl}')
+        return
     try:
         cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
     except sqlite3.OperationalError:
@@ -170,14 +310,36 @@ def _add_column(cur, table, column, decl):
 
 
 # ---------------------------------------------------------------------------
-# SQLite Repository
+# Repository (SQLite + PostgreSQL ortak)
 # ---------------------------------------------------------------------------
 class SqliteRepository:
-    def __init__(self, path):
+    def __init__(self, url, path):
+        self.url = url
         self.path = path
+        self.is_pg = bool(url)
 
     def _conn(self):
-        return _connect(self.path)
+        return _connect(self.url, self.path)
+
+    def _date(self, expr):
+        """Tarih kısmına indirger: SQLite date(x) / Postgres (x)::date."""
+        return f"({expr})::date" if self.is_pg else f"date({expr})"
+
+    def _now_sql(self):
+        """Şu an (metin): SQLite datetime('now') / Postgres now()::text."""
+        return "now()::text" if self.is_pg else "datetime('now')"
+
+    def _insert_returning_id(self, conn, cur, sql, params):
+        """INSERT yapıp yeni id'yi döndürür (Postgres RETURNING / SQLite lastrowid)."""
+        if self.is_pg:
+            cur.execute(sql.rstrip().rstrip(";") + " RETURNING id", params)
+            new_id = cur.fetchone()[0]
+            conn.commit()
+        else:
+            cur.execute(sql, params)
+            conn.commit()
+            new_id = cur.lastrowid
+        return new_id
 
     # ----- Kullanıcılar -------------------------------------------------
     def get_user_by_login(self, identifier):
@@ -205,15 +367,12 @@ class SqliteRepository:
     def create_user(self, *, name, age, eposta, parola_hash, rol="kullanici"):
         conn = self._conn()
         cur = conn.cursor()
-        cur.execute(
-            """INSERT INTO users(name, age, eposta, parola_hash, rol, yetki,
+        sql = """INSERT INTO users(name, age, eposta, parola_hash, rol, yetki,
                                  aktif, basarisiz_giris, olusturulma)
-               VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?)""",
-            (name, age, eposta, parola_hash, rol, rol,
-             datetime.now().isoformat(timespec="seconds")),
-        )
-        conn.commit()
-        new_id = cur.lastrowid
+               VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?)"""
+        params = (name, age, eposta, parola_hash, rol, rol,
+                  datetime.now().isoformat(timespec="seconds"))
+        new_id = self._insert_returning_id(conn, cur, sql, params)
         conn.close()
         return new_id
 
@@ -304,7 +463,12 @@ class SqliteRepository:
         def safe(sql):
             try:
                 return c.execute(sql).fetchone()[0] or 0
-            except sqlite3.OperationalError:
+            except Exception:
+                # Postgres'te hatalı sorgu işlemi (transaction) bozar → geri al
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 return 0
 
         stats = {
@@ -435,18 +599,15 @@ class SqliteRepository:
     def create_invoice(self, data):
         conn = self._conn()
         cur = conn.cursor()
-        cur.execute(
-            """INSERT INTO invoices(musteri_id, fatura_no, tarih, urun_kodu, acıklama,
-                 Birim_Fiyat, iskonto, kdv, ara_toplam, iskonto_tutarı, kdv_tutarı,
+        sql = """INSERT INTO invoices(musteri_id, fatura_no, tarih, urun_kodu, acıklama,
+                 "Birim_Fiyat", iskonto, kdv, ara_toplam, iskonto_tutarı, kdv_tutarı,
                  toplam_tutar, fatura_tipi, vade_tarihi, gecerlilik_tarihi)
                VALUES (:musteri_id, :fatura_no, :tarih, :urun_kodu, :acıklama,
                  :Birim_Fiyat, :iskonto, :kdv, :ara_toplam, :iskonto_tutarı, :kdv_tutarı,
                  :toplam_tutar, :fatura_tipi, :vade_tarihi,
-                 :gecerlilik_tarihi)""",
-            {**data, "gecerlilik_tarihi": data.get("gecerlilik_tarihi", "")},
-        )
-        conn.commit()
-        new_id = cur.lastrowid
+                 :gecerlilik_tarihi)"""
+        params = {**data, "gecerlilik_tarihi": data.get("gecerlilik_tarihi", "")}
+        new_id = self._insert_returning_id(conn, cur, sql, params)
         conn.close()
         return new_id
 
@@ -559,11 +720,11 @@ class SqliteRepository:
         if q:
             like = f"%{q}%"
             rows = conn.execute(
-                "SELECT * FROM expenses WHERE kategori LIKE ? OR aciklama LIKE ? ORDER BY date(tarih) DESC, id DESC",
+                "SELECT * FROM expenses WHERE kategori LIKE ? OR aciklama LIKE ? ORDER BY tarih DESC, id DESC",
                 (like, like),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM expenses ORDER BY date(tarih) DESC, id DESC").fetchall()
+            rows = conn.execute("SELECT * FROM expenses ORDER BY tarih DESC, id DESC").fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
@@ -633,11 +794,15 @@ class SqliteRepository:
         return row["cevap"]
 
     def set_ai_cache(self, key, soru, cevap):
-        self._exec(
-            "INSERT OR REPLACE INTO ai_cache(soru_hash, soru, cevap, olusturma) "
-            "VALUES (?,?,?,?)",
-            (key, soru, cevap, datetime.now().isoformat(timespec="seconds")),
-        )
+        ts = datetime.now().isoformat(timespec="seconds")
+        if self.is_pg:
+            sql = ("INSERT INTO ai_cache(soru_hash, soru, cevap, olusturma) "
+                   "VALUES (?,?,?,?) ON CONFLICT(soru_hash) DO UPDATE SET "
+                   "soru=EXCLUDED.soru, cevap=EXCLUDED.cevap, olusturma=EXCLUDED.olusturma")
+        else:
+            sql = ("INSERT OR REPLACE INTO ai_cache(soru_hash, soru, cevap, olusturma) "
+                   "VALUES (?,?,?,?)")
+        self._exec(sql, (key, soru, cevap, ts))
 
     # ===================================================================
     #  RAPORLAR & ANALİZ
@@ -689,7 +854,7 @@ class SqliteRepository:
                       COALESCE((SELECT SUM(p.tutar) FROM payments p WHERE p.fatura_id=i.id),0) AS odenen
                FROM invoices i LEFT JOIN customers c ON c.id=i.musteri_id
                WHERE i.fatura_tipi='Satış'
-               ORDER BY date(i.vade_tarihi) ASC"""
+               ORDER BY i.vade_tarihi ASC"""
         ).fetchall()
         conn.close()
         out = []
@@ -770,14 +935,13 @@ class SqliteRepository:
             h["bakiye"] = round(bakiye, 2)
         return hareketler
 
-    @staticmethod
-    def _date_where(col, start, end):
+    def _date_where(self, col, start, end):
         clauses, params = [], []
         if start:
-            clauses.append(f"date({col}) >= date(?)")
+            clauses.append(f"{self._date(col)} >= {self._date('?')}")
             params.append(start)
         if end:
-            clauses.append(f"date({col}) <= date(?)")
+            clauses.append(f"{self._date(col)} <= {self._date('?')}")
             params.append(end)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         return where, params
@@ -832,8 +996,14 @@ class SqliteRepository:
             conn.execute(sql, params)
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
-            return False
+        except Exception as e:
+            if _is_integrity_error(e):
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                return False
+            raise
         finally:
             conn.close()
 
@@ -1353,21 +1523,27 @@ class SqliteRepository:
     def bildirim_logla(self, user_id: int, tip: str, referans: str):
         """Bildirimi gönderildi olarak işaretle."""
         conn = self._conn()
-        conn.execute(
-            "INSERT OR IGNORE INTO bildirim_log(user_id, tip, referans) VALUES(?,?,?)",
-            (user_id, tip, referans),
-        )
+        if self.is_pg:
+            sql = ("INSERT INTO bildirim_log(user_id, tip, referans) "
+                   "VALUES(?,?,?) ON CONFLICT DO NOTHING")
+        else:
+            sql = "INSERT OR IGNORE INTO bildirim_log(user_id, tip, referans) VALUES(?,?,?)"
+        conn.execute(sql, (user_id, tip, referans))
         conn.commit()
         conn.close()
 
     # ----- FCM Push Token'ları ------------------------------------------
     def save_fcm_token(self, user_id: int, token: str):
         conn = self._conn()
-        conn.execute(
-            "INSERT OR REPLACE INTO fcm_tokens(user_id, token, olusturulma) "
-            "VALUES(?, ?, datetime('now'))",
-            (user_id, token),
-        )
+        now = self._now_sql()
+        if self.is_pg:
+            sql = (f"INSERT INTO fcm_tokens(user_id, token, olusturulma) "
+                   f"VALUES(?, ?, {now}) ON CONFLICT(token) DO UPDATE SET "
+                   f"user_id=EXCLUDED.user_id, olusturulma=EXCLUDED.olusturulma")
+        else:
+            sql = (f"INSERT OR REPLACE INTO fcm_tokens(user_id, token, olusturulma) "
+                   f"VALUES(?, ?, {now})")
+        conn.execute(sql, (user_id, token))
         conn.commit()
         conn.close()
 
@@ -1404,5 +1580,8 @@ def get_repo():
         if backend == "firebase":
             # Geçişte: from .firebase_repo import FirebaseRepository
             raise NotImplementedError("Firebase backend henüz eklenmedi.")
-        g.repo = SqliteRepository(current_app.config["SQLITE_PATH"])
+        g.repo = SqliteRepository(
+            current_app.config.get("DATABASE_URL", ""),
+            current_app.config["SQLITE_PATH"],
+        )
     return g.repo
