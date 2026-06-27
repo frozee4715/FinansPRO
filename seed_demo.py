@@ -15,7 +15,6 @@ NOT: Admin hesabı burada OLUŞTURULMAZ. Admin yalnızca ortam değişkenleri
 
 Veritabanı yolu, uygulamayla AYNI olması için config.Config.SQLITE_PATH'ten okunur.
 """
-import sqlite3
 from datetime import datetime, date, timedelta
 
 from werkzeug.security import generate_password_hash
@@ -23,7 +22,11 @@ from werkzeug.security import generate_password_hash
 from config import Config
 from app.data.repository import init_schema, SqliteRepository
 
+# Çift-motorlu: DATABASE_URL doluysa Postgres, boşsa SQLite (uygulamayla aynı)
+DB_URL = Config.DATABASE_URL
 DB_PATH = Config.SQLITE_PATH
+CFG = {"DATABASE_URL": DB_URL, "SQLITE_PATH": DB_PATH}
+IS_PG = bool(DB_URL)
 
 # Demo hesabı bilgileri (pazarlamada paylaşılabilir)
 DEMO_EMAIL = "demo@finanspro.com"
@@ -32,7 +35,7 @@ DEMO_PASS = "Demo1234"
 BUGUN = date(2026, 6, 26)
 
 
-def wipe(conn):
+def wipe(repo):
     """Tüm demo/işlem tablolarını temizler ve ID sayaçlarını sıfırlar."""
     tablolar = [
         "users", "customers", "products", "invoices", "payments", "expenses",
@@ -40,17 +43,28 @@ def wipe(conn):
         "stok_hareketleri", "butce", "tekrarlayan_faturalar", "audit_log",
         "destek_talepleri", "bildirim_log", "fcm_tokens", "settings",
     ]
-    conn.execute("PRAGMA foreign_keys = OFF")
-    for t in tablolar:
+    conn = repo._conn()
+    if repo.is_pg:
+        # Postgres: TRUNCATE hepsini siler + kimlik sayaçlarını sıfırlar
         try:
-            conn.execute(f"DELETE FROM {t}")
-        except sqlite3.OperationalError:
+            conn.execute("TRUNCATE " + ", ".join(tablolar) +
+                         " RESTART IDENTITY CASCADE")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+    else:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        for t in tablolar:
+            try:
+                conn.execute(f"DELETE FROM {t}")
+            except Exception:
+                pass
+        try:
+            conn.execute("DELETE FROM sqlite_sequence")
+        except Exception:
             pass
-    try:
-        conn.execute("DELETE FROM sqlite_sequence")
-    except sqlite3.OperationalError:
-        pass
-    conn.commit()
+        conn.commit()
+    conn.close()
 
 
 def compute_invoice(base, iskonto, kdv):
@@ -80,14 +94,14 @@ def _ensure_demo_user(repo):
     return uid
 
 
-def populate(repo, conn):
+def populate(repo):
     """İş verisini (ayarlar, müşteri, ürün, fatura, ...) ekler. Silme YAPMAZ."""
     # --- Şirket / marka ayarları ------------------------------------------
-    repo.set_setting("sirket_adi", "FinansPro Demo Ticaret A.Ş.")
+    repo.set_setting("sirket_adi", "MuhasebePRO Demo Ticaret A.Ş.")
     repo.set_setting("vergi_no", "1234567890")
     repo.set_setting("adres", "Atatürk Cad. No:42, Çankaya / Ankara")
     repo.set_setting("telefon", "0312 444 12 34")
-    repo.set_setting("eposta", "info@finanspro.com")
+    repo.set_setting("eposta", "info@muhasebepro.com")
     repo.set_setting("para_birimi", "₺")
     repo.set_setting("plan", "pro")
 
@@ -225,28 +239,32 @@ def populate(repo, conn):
     print(f"• {len(cekler)} çek/senet eklendi.")
 
 
-def _has_business_data(conn):
+def _has_business_data(repo):
     """DB'de zaten iş verisi (müşteri) var mı?"""
+    conn = repo._conn()
     try:
         return conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0] > 0
-    except sqlite3.OperationalError:
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return False
+    finally:
+        conn.close()
 
 
 def seed():
     """ELLE tam sıfırlama: tüm veriyi siler, demo hesabı + zengin demo veri kurar."""
-    init_schema(DB_PATH)
-    repo = SqliteRepository(DB_PATH)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    init_schema(CFG)
+    repo = SqliteRepository(DB_URL, DB_PATH)
 
-    print(f"DB: {DB_PATH}")
-    wipe(conn)
+    print(f"DB: {'PostgreSQL' if IS_PG else DB_PATH}")
+    wipe(repo)
     print("• Eski veriler temizlendi.")
     _ensure_demo_user(repo)
     print(f"• Demo hesabı: {DEMO_EMAIL} / {DEMO_PASS} (Pro)")
-    populate(repo, conn)
-    conn.close()
+    populate(repo)
     print("\n[OK] Demo veritabanı hazır.")
     print(f"   Giriş: {DEMO_EMAIL}  |  Şifre: {DEMO_PASS}")
     print("   Admin: yalnızca ADMIN_EMAIL/ADMIN_PASSWORD ayarlıysa açılışta oluşur.")
@@ -256,18 +274,13 @@ def seed_if_empty():
     """AÇILIŞTA güvenli tohumlama: yalnızca DB'de iş verisi yoksa demo veriyi
     kurar. Mevcut veriyi ASLA silmez. Demo hesabını her durumda garanti eder.
     Tohumlama yapıldıysa True döner."""
-    init_schema(DB_PATH)
-    repo = SqliteRepository(DB_PATH)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        _ensure_demo_user(repo)
-        if _has_business_data(conn):
-            return False
-        populate(repo, conn)
-        return True
-    finally:
-        conn.close()
+    init_schema(CFG)
+    repo = SqliteRepository(DB_URL, DB_PATH)
+    _ensure_demo_user(repo)
+    if _has_business_data(repo):
+        return False
+    populate(repo)
+    return True
 
 
 if __name__ == "__main__":
