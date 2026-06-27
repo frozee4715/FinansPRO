@@ -316,9 +316,9 @@
     const grid  = isDark ? 'rgba(255,255,255,.07)' : 'rgba(76,29,149,.07)';
     const tick  = isDark ? 'rgba(255,255,255,.45)' : 'rgba(70,63,92,.65)';
     const tbg   = isDark ? '#1a1828' : '#fff';
-    const ttxt  = isDark ? '#ece9f7' : '#1e1b2e';
-    const tsub  = isDark ? '#9a93b5' : '#6b6580';
-    const tbrd  = isDark ? '#2c2942' : '#eae6f5';
+    const ttxt  = isDark ? '#ece9f7' : '#14271f';
+    const tsub  = isDark ? '#9a93b5' : '#5b6b63';
+    const tbrd  = isDark ? '#2c2942' : '#e3ede8';
 
     {% if aylik %}
     const el = document.getElementById('cAylik');
@@ -331,10 +331,10 @@
                 data: {{ aylik|map(attribute='tutar')|list|tojson }},
                 backgroundColor: function(c) {
                     var ca = c.chart.chartArea;
-                    if (!ca) return 'rgba(124,58,237,.85)';
+                    if (!ca) return 'rgba(27, 107, 74,.85)';
                     var g = c.chart.ctx.createLinearGradient(0, ca.bottom, 0, ca.top);
-                    g.addColorStop(0, 'rgba(124,58,237,.80)');
-                    g.addColorStop(1, 'rgba(236,72,153,.85)');
+                    g.addColorStop(0, 'rgba(27, 107, 74,.80)');
+                    g.addColorStop(1, 'rgba(42, 168, 118,.85)');
                     return g;
                 },
                 borderRadius: 10, borderSkipped: false, maxBarThickness: 48

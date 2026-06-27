@@ -54,7 +54,7 @@
                 <!-- Hazır renkler -->
                 <div style="display:flex; gap:9px; flex-wrap:wrap;">
                     {% set renkler = [
-                        ('#7c3aed', 'Mor (Varsayılan)'),
+                        ('#1b6b4a', 'Mor (Varsayılan)'),
                         ('#2563eb', 'Kobalt Mavi'),
                         ('#059669', 'Yeşil'),
                         ('#d97706', 'Turuncu'),
@@ -75,7 +75,7 @@
 
                 <!-- Özel renk seçici -->
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="color" id="renkPicker" value="{{ s.marka_renk or '#7c3aed' }}"
+                    <input type="color" id="renkPicker" value="{{ s.marka_renk or '#1b6b4a' }}"
                            style="width:44px; height:44px; border:none; border-radius:10px; cursor:pointer; padding:2px;"
                            oninput="setColor(this.value)">
                     <span class="muted" style="font-size:.84rem;">Özel renk</span>
@@ -89,9 +89,9 @@
                 <div id="renkBar" style="height:8px; background:{{ s.marka_renk or 'var(--grad)' }};"></div>
                 <div style="padding:14px 18px; display:flex; align-items:center; gap:12px; background:var(--surface-2);">
                     <div id="renkButon" style="padding:8px 18px; border-radius:10px; color:#fff; font-weight:700; font-size:.88rem;
-                                              background:{{ s.marka_renk or '#7c3aed' }};">Buton Örneği</div>
+                                              background:{{ s.marka_renk or '#1b6b4a' }};">Buton Örneği</div>
                     <div id="renkBadge" style="padding:4px 12px; border-radius:999px; color:#fff; font-size:.78rem; font-weight:800;
-                                              background:{{ s.marka_renk or '#7c3aed' }};">Rozet</div>
+                                              background:{{ s.marka_renk or '#1b6b4a' }};">Rozet</div>
                     <span class="muted" style="font-size:.82rem;">Canlı önizleme</span>
                 </div>
             </div>
@@ -137,7 +137,7 @@ function setColor(hex) {
     // Hazır renk seçim çerçevesi güncelle
     document.querySelectorAll('[onclick^="setColor"]').forEach(function(btn) {
         var btnHex = btn.getAttribute('onclick').match(/'([^']+)'/)[1];
-        btn.style.borderColor = btnHex === hex ? '#7c3aed' : 'transparent';
+        btn.style.borderColor = btnHex === hex ? '#1b6b4a' : 'transparent';
     });
 }
 

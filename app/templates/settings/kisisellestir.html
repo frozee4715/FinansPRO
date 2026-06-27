@@ -18,7 +18,7 @@
             <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     {% set renkler = [
-                        ('#7c3aed','Mor'),('#2563eb','Mavi'),('#059669','Yeşil'),
+                        ('#1b6b4a','Mor'),('#2563eb','Mavi'),('#059669','Yeşil'),
                         ('#d97706','Turuncu'),('#dc2626','Kırmızı'),('#db2777','Pembe'),
                         ('#0891b2','Turkuaz'),('#1f2937','Antrasit'),('#f59e0b','Amber'),
                     ] %}
@@ -33,7 +33,7 @@
                     {% endfor %}
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="color" id="markaPicker" value="{{ s.marka_renk or '#7c3aed' }}"
+                    <input type="color" id="markaPicker" value="{{ s.marka_renk or '#1b6b4a' }}"
                            style="width:44px;height:44px;border:none;border-radius:10px;cursor:pointer;padding:2px;"
                            oninput="setMarka(this.value)">
                     <span class="muted" style="font-size:.82rem;">Özel</span>
@@ -43,8 +43,8 @@
             <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);">
                 <div id="markaBar" style="height:7px;background:{{ s.marka_renk or 'var(--grad)' }};"></div>
                 <div style="padding:14px 18px;display:flex;align-items:center;gap:10px;background:var(--surface-2);">
-                    <div id="markaBtn" style="padding:8px 18px;border-radius:10px;color:#fff;font-weight:700;font-size:.86rem;background:{{ s.marka_renk or '#7c3aed' }};">Buton</div>
-                    <div id="markaBadge" style="padding:4px 12px;border-radius:999px;color:#fff;font-size:.76rem;font-weight:800;background:{{ s.marka_renk or '#7c3aed' }};">Rozet</div>
+                    <div id="markaBtn" style="padding:8px 18px;border-radius:10px;color:#fff;font-weight:700;font-size:.86rem;background:{{ s.marka_renk or '#1b6b4a' }};">Buton</div>
+                    <div id="markaBadge" style="padding:4px 12px;border-radius:999px;color:#fff;font-size:.76rem;font-weight:800;background:{{ s.marka_renk or '#1b6b4a' }};">Rozet</div>
                     <span class="muted" style="font-size:.8rem;">↑ Canlı önizleme</span>
                 </div>
             </div>
@@ -61,8 +61,8 @@
             <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     {% set renkler2 = [
-                        ('#ec4899','Pembe'),('#f43f5e','Kırmızı'),('#f59e0b','Amber'),
-                        ('#10b981','Yeşil'),('#06b6d4','Cyan'),('#8b5cf6','Lila'),
+                        ('#2aa876','Pembe'),('#f43f5e','Kırmızı'),('#f59e0b','Amber'),
+                        ('#10b981','Yeşil'),('#14b8a6','Cyan'),('#1b6b4a','Lila'),
                         ('#6366f1','İndigo'),('#0ea5e9','Gökyüzü'),
                     ] %}
                     {% for hex, ad in renkler2 %}
@@ -77,7 +77,7 @@
                     {% endfor %}
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="color" id="ikincilPicker" value="{{ s.ikincil_renk or '#ec4899' }}"
+                    <input type="color" id="ikincilPicker" value="{{ s.ikincil_renk or '#2aa876' }}"
                            style="width:44px;height:44px;border:none;border-radius:10px;cursor:pointer;padding:2px;"
                            oninput="setIkincil(this.value)">
                     <span class="muted" style="font-size:.82rem;">Özel</span>
@@ -85,9 +85,9 @@
             </div>
             <input type="hidden" name="ikincil_renk" id="ikincilInput" value="{{ s.ikincil_renk or '' }}">
             <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);">
-                <div id="ikincilGrad" style="height:7px;background:linear-gradient(90deg, {{ s.marka_renk or '#7c3aed' }}, {{ s.ikincil_renk or '#ec4899' }});"></div>
+                <div id="ikincilGrad" style="height:7px;background:linear-gradient(90deg, {{ s.marka_renk or '#1b6b4a' }}, {{ s.ikincil_renk or '#2aa876' }});"></div>
                 <div style="padding:12px 18px;display:flex;align-items:center;gap:10px;background:var(--surface-2);">
-                    <div id="ikincilDot" style="width:12px;height:12px;border-radius:50%;background:{{ s.ikincil_renk or '#ec4899' }};flex-shrink:0;"></div>
+                    <div id="ikincilDot" style="width:12px;height:12px;border-radius:50%;background:{{ s.ikincil_renk or '#2aa876' }};flex-shrink:0;"></div>
                     <span style="font-size:.84rem;font-weight:600;color:var(--text);">Grafikler ve ikonlar bu rengi kullanır</span>
                 </div>
             </div>
@@ -206,8 +206,8 @@
 {% block scripts %}
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Nunito:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <script>
-var _marka = '{{ s.marka_renk or "#7c3aed" }}';
-var _ikincil = '{{ s.ikincil_renk or "#ec4899" }}';
+var _marka = '{{ s.marka_renk or "#1b6b4a" }}';
+var _ikincil = '{{ s.ikincil_renk or "#2aa876" }}';
 
 function setMarka(hex) {
     _marka = hex;
@@ -242,8 +242,8 @@ function sifirla() {
         r.checked = r.value === 'Inter' || r.value === 'orta' || r.value === 'normal';
     });
     document.querySelectorAll('input[type=checkbox]').forEach(function(c) { c.checked = false; });
-    setMarka('#7c3aed');
-    setIkincil('#ec4899');
+    setMarka('#1b6b4a');
+    setIkincil('#2aa876');
 }
 </script>
 {% endblock %}
