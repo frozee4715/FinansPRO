@@ -68,7 +68,7 @@ class Config:
     LOCKOUT_MINUTES = 5
 
     # Uygulama markası
-    APP_NAME = "FinansPro"
+    APP_NAME = "MuhasebePRO"
     APP_TAGLINE = "Akıllı e-Muhasebe Çözümü"
 
     # Varsayılan işletme & muhasebe ayarları (Ayarlar sayfasından değiştirilir)

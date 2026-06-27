@@ -15,7 +15,7 @@
     messaging.onMessage(function (payload) {
         const n = payload.notification || {};
         if (Notification.permission === 'granted') {
-            new Notification(n.title || 'FinansPro', {
+            new Notification(n.title || 'MuhasebePRO', {
                 body: n.body || '',
                 icon: '/static/img/logo-mark.svg'
             });
