@@ -138,6 +138,11 @@ def init_schema(path):
         olusturulma TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)""")
 
+    # AI yanıt önbelleği (token tasarrufu): aynı soru + aynı veri → API'ye gitmez
+    cur.execute("""CREATE TABLE IF NOT EXISTS ai_cache(
+        soru_hash TEXT PRIMARY KEY,
+        soru TEXT, cevap TEXT, olusturma TEXT)""")
+
     # Web için users tablosuna eklenen sütunlar (varsa atlar)
     _add_column(cur, "users", "parola_hash", "TEXT")
     _add_column(cur, "users", "rol", "TEXT DEFAULT 'kullanici'")
@@ -607,6 +612,31 @@ class SqliteRepository:
             "INSERT INTO settings(anahtar, deger) VALUES (?,?) "
             "ON CONFLICT(anahtar) DO UPDATE SET deger = excluded.deger",
             (anahtar, deger),
+        )
+
+    # ----- AI yanıt önbelleği (token tasarrufu) ------------------------
+    def get_ai_cache(self, key, ttl_saat=6):
+        """Önbellekteki cevabı döndürür (TTL içinde değilse None)."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT cevap, olusturma FROM ai_cache WHERE soru_hash = ?", (key,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        try:
+            olu = datetime.fromisoformat(row["olusturma"])
+            if datetime.now() - olu > timedelta(hours=ttl_saat):
+                return None
+        except (ValueError, TypeError):
+            pass
+        return row["cevap"]
+
+    def set_ai_cache(self, key, soru, cevap):
+        self._exec(
+            "INSERT OR REPLACE INTO ai_cache(soru_hash, soru, cevap, olusturma) "
+            "VALUES (?,?,?,?)",
+            (key, soru, cevap, datetime.now().isoformat(timespec="seconds")),
         )
 
     # ===================================================================

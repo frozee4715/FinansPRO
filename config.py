@@ -75,6 +75,9 @@ class Config:
     AI_VISION_MODEL = os.environ.get(
         "AI_VISION_MODEL", "meta-llama/llama-3.2-11b-vision-instruct:free"
     )
+    # Maliyet kontrolü: cevap uzunluğu tavanı ve yanıt önbelleği süresi (saat)
+    AI_MAX_TOKENS = int(os.environ.get("AI_MAX_TOKENS", "600"))
+    AI_CACHE_TTL_HOURS = int(os.environ.get("AI_CACHE_TTL_HOURS", "6"))
 
     # E-posta (SMTP) — .env'de tanımlayın
     SMTP_HOST = os.environ.get("SMTP_HOST", "")

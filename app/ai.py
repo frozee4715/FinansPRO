@@ -6,6 +6,8 @@ alacak ve stok hakkında soru-cevap yapabilen bir finans danışmanı sağlar.
 Anahtar .env içindeki OPENROUTER_API_KEY'den okunur. Pro sürüme özeldir.
 """
 import json
+import re
+import hashlib
 import urllib.request
 import urllib.error
 from flask import (Blueprint, render_template, request, redirect, url_for,
@@ -16,6 +18,28 @@ from .security import pro_required
 ai_bp = Blueprint("ai", __name__, url_prefix="/asistan")
 
 MAX_GECMIS = 12  # session'da tutulacak en fazla mesaj çifti
+
+
+def _normalize_soru(s):
+    """Soruyu önbellek anahtarı için normalize eder (küçük harf, boşluk, noktalama)."""
+    s = (s or "").strip().lower()
+    s = re.sub(r"\s+", " ", s)
+    return s.strip(" ?!.,;:\n\t")
+
+
+def _veri_parmak_izi(repo):
+    """İşletme verisinin kısa parmak izi — veri değişince önbellek tazelensin."""
+    try:
+        st = repo.dashboard_stats()
+        ie = repo.income_expense()
+        return (f"{st.get('musteri')}-{st.get('urun')}-{st.get('fatura')}-"
+                f"{round(ie.get('gelir', 0))}-{round(ie.get('gider', 0))}")
+    except Exception:
+        return "x"
+
+
+def _cache_key(soru, fp):
+    return hashlib.sha256((_normalize_soru(soru) + "|" + fp).encode("utf-8")).hexdigest()
 
 
 def _isletme_ozeti(repo):
@@ -65,6 +89,7 @@ def _ai_cagir(messages):
     payload = json.dumps({
         "model": current_app.config["AI_MODEL"],
         "messages": messages,
+        "max_tokens": current_app.config.get("AI_MAX_TOKENS", 600),
     }).encode("utf-8")
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Authorization", f"Bearer {api_key}")
@@ -117,6 +142,7 @@ def vision_json(image_data_url, instruction):
     payload = json.dumps({
         "model": model,
         "temperature": 0,
+        "max_tokens": 700,
         "messages": [{
             "role": "user",
             "content": [
@@ -164,7 +190,21 @@ def send():
 
     repo = get_repo()
     gecmis = session.get("ai_chat", [])
+
+    # Standalone (ilk) soru mu? Sadece bunları önbellekten ver/önbelleğe al;
+    # sohbet takip soruları bağlama bağlı olduğu için her zaman API'ye gider.
+    standalone = not any(m["role"] == "assistant" for m in gecmis)
     gecmis.append({"role": "user", "content": soru})
+
+    # --- Önbellek kontrolü (token harcamadan) ---
+    if standalone:
+        key = _cache_key(soru, _veri_parmak_izi(repo))
+        ttl = current_app.config.get("AI_CACHE_TTL_HOURS", 6)
+        onbellek = repo.get_ai_cache(key, ttl)
+        if onbellek:
+            gecmis.append({"role": "assistant", "content": onbellek})
+            session["ai_chat"] = gecmis[-(MAX_GECMIS * 2):]
+            return redirect(url_for("ai.chat"))
 
     messages = [{"role": "system", "content": _sistem_istemi(repo)}]
     messages.extend(gecmis[-MAX_GECMIS:])
@@ -175,6 +215,8 @@ def send():
         gecmis.pop()  # başarısız soruyu geçmişten çıkar
     else:
         gecmis.append({"role": "assistant", "content": cevap})
+        if standalone:
+            repo.set_ai_cache(_cache_key(soru, _veri_parmak_izi(repo)), soru, cevap)
 
     session["ai_chat"] = gecmis[-(MAX_GECMIS * 2):]
     return redirect(url_for("ai.chat"))
