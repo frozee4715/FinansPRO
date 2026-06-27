@@ -294,6 +294,33 @@ def init_schema(cfg):
     _add_column(cur, "invoices", "tur", "TEXT DEFAULT 'Fatura'", is_pg)
     _add_column(cur, "invoices", "gecerlilik_tarihi", "TEXT", is_pg)
 
+    # --- ÇOK KİRACILI (multi-tenant) izolasyon: her iş tablosuna user_id -----
+    # Her firmanın verisi yalnızca kendisine görünür; sorgular user_id ile filtrelenir.
+    _ISCOPED = [
+        "customers", "products", "invoices", "payments", "expenses",
+        "tedarikcilar", "hesaplar", "hesap_hareketleri", "cek_senet",
+        "stok_hareketleri", "butce", "tekrarlayan_faturalar",
+    ]
+    for t in _ISCOPED:
+        _add_column(cur, t, "user_id", "INTEGER", is_pg)
+        ddl(f"CREATE INDEX IF NOT EXISTS idx_{t}_user ON {t}(user_id)")
+
+    # Kullanıcı bazlı ayarlar (şirket adı, marka vb. her firma için ayrı).
+    # Eski global 'settings' tablosu yerine bunu kullanırız.
+    ddl("""CREATE TABLE IF NOT EXISTS user_settings(
+        user_id INTEGER NOT NULL,
+        anahtar TEXT NOT NULL,
+        deger TEXT,
+        PRIMARY KEY(user_id, anahtar))""")
+
+    # Kullanıcı bazlı bütçe (eski 'butce' tablosundaki UNIQUE(yil,ay,kategori)
+    # çok firmaya uymuyor; bunun bileşik anahtarı user_id içerir).
+    ddl("""CREATE TABLE IF NOT EXISTS user_butce(
+        user_id INTEGER NOT NULL,
+        yil INTEGER, ay INTEGER, kategori TEXT,
+        hedef_tutar REAL,
+        PRIMARY KEY(user_id, yil, ay, kategori))""")
+
     conn.commit()
     conn.close()
 
@@ -313,10 +340,13 @@ def _add_column(cur, table, column, decl, is_pg):
 # Repository (SQLite + PostgreSQL ortak)
 # ---------------------------------------------------------------------------
 class SqliteRepository:
-    def __init__(self, url, path):
+    def __init__(self, url, path, uid=None):
         self.url = url
         self.path = path
         self.is_pg = bool(url)
+        # Çok kiracılı izolasyon: geçerli kullanıcı (firma) id'si.
+        # İş verisi sorguları yalnızca bu kullanıcının kayıtlarını görür/oluşturur.
+        self.uid = uid
 
     def _conn(self):
         return _connect(self.url, self.path)
@@ -460,9 +490,9 @@ class SqliteRepository:
         conn = self._conn()
         c = conn.cursor()
 
-        def safe(sql):
+        def safe(sql, params=()):
             try:
-                return c.execute(sql).fetchone()[0] or 0
+                return c.execute(sql, params).fetchone()[0] or 0
             except Exception:
                 # Postgres'te hatalı sorgu işlemi (transaction) bozar → geri al
                 try:
@@ -471,13 +501,14 @@ class SqliteRepository:
                     pass
                 return 0
 
+        u = (self.uid,)
         stats = {
-            "musteri": safe("SELECT COUNT(*) FROM customers"),
-            "urun": safe("SELECT COUNT(*) FROM products"),
-            "fatura": safe("SELECT COUNT(*) FROM invoices"),
-            "ciro": safe("SELECT COALESCE(SUM(toplam_tutar),0) FROM invoices WHERE fatura_tipi='Satış'"),
-            "tahsilat": safe("SELECT COALESCE(SUM(tutar),0) FROM payments"),
-            "dusuk_stok": safe("SELECT COUNT(*) FROM products WHERE stok <= 5"),
+            "musteri": safe("SELECT COUNT(*) FROM customers WHERE user_id = ?", u),
+            "urun": safe("SELECT COUNT(*) FROM products WHERE user_id = ?", u),
+            "fatura": safe("SELECT COUNT(*) FROM invoices WHERE user_id = ?", u),
+            "ciro": safe("SELECT COALESCE(SUM(toplam_tutar),0) FROM invoices WHERE user_id = ? AND fatura_tipi='Satış'", u),
+            "tahsilat": safe("SELECT COALESCE(SUM(tutar),0) FROM payments WHERE user_id = ?", u),
+            "dusuk_stok": safe("SELECT COUNT(*) FROM products WHERE user_id = ? AND stok <= 5", u),
         }
         conn.close()
         return stats
@@ -490,34 +521,38 @@ class SqliteRepository:
         if q:
             like = f"%{q}%"
             rows = conn.execute(
-                "SELECT * FROM products WHERE name LIKE ? OR aciklama LIKE ? ORDER BY id DESC",
-                (like, like),
+                "SELECT * FROM products WHERE user_id = ? AND (name LIKE ? OR aciklama LIKE ?) ORDER BY id DESC",
+                (self.uid, like, like),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM products WHERE user_id = ? ORDER BY id DESC", (self.uid,)
+            ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def get_product(self, pid):
         conn = self._conn()
-        row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM products WHERE id = ? AND user_id = ?", (pid, self.uid)
+        ).fetchone()
         conn.close()
         return dict(row) if row else None
 
     def create_product(self, *, name, aciklama, birim_fiyat, stok, kategori=""):
         self._exec(
-            "INSERT INTO products(name, aciklama, birim_fiyat, stok, kategori) VALUES (?,?,?,?,?)",
-            (name, aciklama, birim_fiyat, stok, kategori),
+            "INSERT INTO products(name, aciklama, birim_fiyat, stok, kategori, user_id) VALUES (?,?,?,?,?,?)",
+            (name, aciklama, birim_fiyat, stok, kategori, self.uid),
         )
 
     def update_product(self, pid, *, name, aciklama, birim_fiyat, stok, kategori=""):
         self._exec(
-            "UPDATE products SET name=?, aciklama=?, birim_fiyat=?, stok=?, kategori=? WHERE id=?",
-            (name, aciklama, birim_fiyat, stok, kategori, pid),
+            "UPDATE products SET name=?, aciklama=?, birim_fiyat=?, stok=?, kategori=? WHERE id=? AND user_id=?",
+            (name, aciklama, birim_fiyat, stok, kategori, pid, self.uid),
         )
 
     def delete_product(self, pid):
-        return self._exec_safe("DELETE FROM products WHERE id = ?", (pid,))
+        return self._exec_safe("DELETE FROM products WHERE id = ? AND user_id = ?", (pid, self.uid))
 
     # ===================================================================
     #  MÜŞTERİLER
@@ -527,41 +562,47 @@ class SqliteRepository:
         if q:
             like = f"%{q}%"
             rows = conn.execute(
-                "SELECT * FROM customers WHERE unvan LIKE ? OR vergi_no LIKE ? OR eposta LIKE ? ORDER BY id DESC",
-                (like, like, like),
+                "SELECT * FROM customers WHERE user_id = ? AND (unvan LIKE ? OR vergi_no LIKE ? OR eposta LIKE ?) ORDER BY id DESC",
+                (self.uid, like, like, like),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM customers ORDER BY id DESC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM customers WHERE user_id = ? ORDER BY id DESC", (self.uid,)
+            ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def get_customer(self, cid):
         conn = self._conn()
-        row = conn.execute("SELECT * FROM customers WHERE id = ?", (cid,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM customers WHERE id = ? AND user_id = ?", (cid, self.uid)
+        ).fetchone()
         conn.close()
         return dict(row) if row else None
 
     def customer_options(self):
         """Fatura formu için (id, unvan) listesi."""
         conn = self._conn()
-        rows = conn.execute("SELECT id, unvan FROM customers ORDER BY unvan").fetchall()
+        rows = conn.execute(
+            "SELECT id, unvan FROM customers WHERE user_id = ? ORDER BY unvan", (self.uid,)
+        ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def create_customer(self, *, unvan, vergi_no, adres, telefon, eposta):
         self._exec(
-            "INSERT INTO customers(unvan, vergi_no, adres, telefon, eposta) VALUES (?,?,?,?,?)",
-            (unvan, vergi_no, adres, telefon, eposta),
+            "INSERT INTO customers(unvan, vergi_no, adres, telefon, eposta, user_id) VALUES (?,?,?,?,?,?)",
+            (unvan, vergi_no, adres, telefon, eposta, self.uid),
         )
 
     def update_customer(self, cid, *, unvan, vergi_no, adres, telefon, eposta):
         self._exec(
-            "UPDATE customers SET unvan=?, vergi_no=?, adres=?, telefon=?, eposta=? WHERE id=?",
-            (unvan, vergi_no, adres, telefon, eposta, cid),
+            "UPDATE customers SET unvan=?, vergi_no=?, adres=?, telefon=?, eposta=? WHERE id=? AND user_id=?",
+            (unvan, vergi_no, adres, telefon, eposta, cid, self.uid),
         )
 
     def delete_customer(self, cid):
-        return self._exec_safe("DELETE FROM customers WHERE id = ?", (cid,))
+        return self._exec_safe("DELETE FROM customers WHERE id = ? AND user_id = ?", (cid, self.uid))
 
     # ===================================================================
     #  FATURALAR
@@ -571,8 +612,8 @@ class SqliteRepository:
         base = """SELECT i.*, c.unvan AS musteri_unvan,
                          COALESCE((SELECT SUM(p.tutar) FROM payments p WHERE p.fatura_id = i.id), 0) AS odenen
                   FROM invoices i LEFT JOIN customers c ON c.id = i.musteri_id"""
-        conditions = []
-        params = []
+        conditions = ["i.user_id = ?"]
+        params = [self.uid]
         if tip == "teklif":
             conditions.append("i.fatura_tipi = 'Teklif'")
         elif tip:
@@ -581,7 +622,7 @@ class SqliteRepository:
             like = f"%{q}%"
             conditions.append("(i.fatura_no LIKE ? OR c.unvan LIKE ?)")
             params.extend([like, like])
-        where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+        where = " WHERE " + " AND ".join(conditions)
         rows = conn.execute(base + where + " ORDER BY i.id DESC", params).fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -590,8 +631,8 @@ class SqliteRepository:
         conn = self._conn()
         row = conn.execute(
             """SELECT i.*, c.unvan AS musteri_unvan, c.vergi_no, c.adres, c.telefon, c.eposta AS musteri_eposta
-               FROM invoices i LEFT JOIN customers c ON c.id = i.musteri_id WHERE i.id = ?""",
-            (iid,),
+               FROM invoices i LEFT JOIN customers c ON c.id = i.musteri_id WHERE i.id = ? AND i.user_id = ?""",
+            (iid, self.uid),
         ).fetchone()
         conn.close()
         return dict(row) if row else None
@@ -601,12 +642,13 @@ class SqliteRepository:
         cur = conn.cursor()
         sql = """INSERT INTO invoices(musteri_id, fatura_no, tarih, urun_kodu, acıklama,
                  "Birim_Fiyat", iskonto, kdv, ara_toplam, iskonto_tutarı, kdv_tutarı,
-                 toplam_tutar, fatura_tipi, vade_tarihi, gecerlilik_tarihi)
+                 toplam_tutar, fatura_tipi, vade_tarihi, gecerlilik_tarihi, user_id)
                VALUES (:musteri_id, :fatura_no, :tarih, :urun_kodu, :acıklama,
                  :Birim_Fiyat, :iskonto, :kdv, :ara_toplam, :iskonto_tutarı, :kdv_tutarı,
                  :toplam_tutar, :fatura_tipi, :vade_tarihi,
-                 :gecerlilik_tarihi)"""
-        params = {**data, "gecerlilik_tarihi": data.get("gecerlilik_tarihi", "")}
+                 :gecerlilik_tarihi, :user_id)"""
+        params = {**data, "gecerlilik_tarihi": data.get("gecerlilik_tarihi", ""),
+                  "user_id": self.uid}
         new_id = self._insert_returning_id(conn, cur, sql, params)
         conn.close()
         return new_id
@@ -614,14 +656,19 @@ class SqliteRepository:
     def convert_teklif_to_invoice(self, iid, yeni_no):
         """Teklifin fatura_tipi'ni 'Satış' yapar ve yeni fatura_no atar."""
         self._exec(
-            "UPDATE invoices SET fatura_tipi='Satış', fatura_no=? WHERE id=?",
-            (yeni_no, iid),
+            "UPDATE invoices SET fatura_tipi='Satış', fatura_no=? WHERE id=? AND user_id=?",
+            (yeni_no, iid, self.uid),
         )
 
     def delete_invoice(self, iid):
         conn = self._conn()
-        conn.execute("DELETE FROM payments WHERE fatura_id = ?", (iid,))
-        conn.execute("DELETE FROM invoices WHERE id = ?", (iid,))
+        # Yalnızca bu kullanıcının faturası ve ona bağlı ödemeler silinir
+        conn.execute(
+            "DELETE FROM payments WHERE fatura_id = ? AND user_id = ?", (iid, self.uid)
+        )
+        conn.execute(
+            "DELETE FROM invoices WHERE id = ? AND user_id = ?", (iid, self.uid)
+        )
         conn.commit()
         conn.close()
 
@@ -629,7 +676,9 @@ class SqliteRepository:
         """FAT2026000001 gibi otomatik fatura no üretir."""
         from datetime import datetime as _dt
         yil = _dt.now().year
-        n = self._scalar("SELECT COUNT(*) FROM invoices") + 1
+        n = self._scalar(
+            "SELECT COUNT(*) FROM invoices WHERE user_id = ?", (self.uid,)
+        ) + 1
         return f"FAT{yil}{n:06d}"
 
     # ===================================================================
@@ -642,14 +691,18 @@ class SqliteRepository:
                FROM payments p
                LEFT JOIN invoices i ON i.id = p.fatura_id
                LEFT JOIN customers c ON c.id = i.musteri_id
-               ORDER BY p.id DESC"""
+               WHERE p.user_id = ?
+               ORDER BY p.id DESC""",
+            (self.uid,),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def get_payment(self, pid):
         conn = self._conn()
-        row = conn.execute("SELECT * FROM payments WHERE id = ?", (pid,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM payments WHERE id = ? AND user_id = ?", (pid, self.uid)
+        ).fetchone()
         conn.close()
         return dict(row) if row else None
 
@@ -660,19 +713,21 @@ class SqliteRepository:
             """SELECT i.id, i.fatura_no, i.toplam_tutar, c.unvan AS musteri_unvan,
                       COALESCE((SELECT SUM(p.tutar) FROM payments p WHERE p.fatura_id = i.id),0) AS odenen
                FROM invoices i LEFT JOIN customers c ON c.id = i.musteri_id
-               ORDER BY i.id DESC"""
+               WHERE i.user_id = ?
+               ORDER BY i.id DESC""",
+            (self.uid,),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def create_payment(self, *, fatura_id, odeme_tarihi, tutar, odeme_tipi):
         self._exec(
-            "INSERT INTO payments(fatura_id, odeme_tarihi, tutar, odeme_tipi) VALUES (?,?,?,?)",
-            (fatura_id, odeme_tarihi, tutar, odeme_tipi),
+            "INSERT INTO payments(fatura_id, odeme_tarihi, tutar, odeme_tipi, user_id) VALUES (?,?,?,?,?)",
+            (fatura_id, odeme_tarihi, tutar, odeme_tipi, self.uid),
         )
 
     def delete_payment(self, pid):
-        self._exec("DELETE FROM payments WHERE id = ?", (pid,))
+        self._exec("DELETE FROM payments WHERE id = ? AND user_id = ?", (pid, self.uid))
 
     # ===================================================================
     #  RAPORLAR (dashboard grafikleri)
@@ -682,9 +737,9 @@ class SqliteRepository:
         conn = self._conn()
         rows = conn.execute(
             """SELECT substr(tarih,1,7) AS ay, COALESCE(SUM(toplam_tutar),0) AS tutar
-               FROM invoices WHERE fatura_tipi='Satış' AND tarih IS NOT NULL
+               FROM invoices WHERE user_id = ? AND fatura_tipi='Satış' AND tarih IS NOT NULL
                GROUP BY ay ORDER BY ay DESC LIMIT ?""",
-            (months,),
+            (self.uid, months),
         ).fetchall()
         conn.close()
         return list(reversed([dict(r) for r in rows]))
@@ -694,9 +749,9 @@ class SqliteRepository:
         rows = conn.execute(
             """SELECT c.unvan, COALESCE(SUM(i.toplam_tutar),0) AS toplam
                FROM invoices i JOIN customers c ON c.id = i.musteri_id
-               WHERE i.fatura_tipi='Satış'
+               WHERE i.fatura_tipi='Satış' AND i.user_id = ?
                GROUP BY c.id ORDER BY toplam DESC LIMIT ?""",
-            (limit,),
+            (self.uid, limit),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -706,8 +761,9 @@ class SqliteRepository:
         rows = conn.execute(
             """SELECT i.fatura_no, i.tarih, i.toplam_tutar, i.fatura_tipi, c.unvan AS musteri_unvan
                FROM invoices i LEFT JOIN customers c ON c.id = i.musteri_id
+               WHERE i.user_id = ?
                ORDER BY i.id DESC LIMIT ?""",
-            (limit,),
+            (self.uid, limit),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -720,64 +776,76 @@ class SqliteRepository:
         if q:
             like = f"%{q}%"
             rows = conn.execute(
-                "SELECT * FROM expenses WHERE kategori LIKE ? OR aciklama LIKE ? ORDER BY tarih DESC, id DESC",
-                (like, like),
+                "SELECT * FROM expenses WHERE user_id = ? AND (kategori LIKE ? OR aciklama LIKE ?) ORDER BY tarih DESC, id DESC",
+                (self.uid, like, like),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM expenses ORDER BY tarih DESC, id DESC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM expenses WHERE user_id = ? ORDER BY tarih DESC, id DESC", (self.uid,)
+            ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def get_expense(self, eid):
         conn = self._conn()
-        row = conn.execute("SELECT * FROM expenses WHERE id = ?", (eid,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM expenses WHERE id = ? AND user_id = ?", (eid, self.uid)
+        ).fetchone()
         conn.close()
         return dict(row) if row else None
 
     def create_expense(self, *, tarih, kategori, aciklama, tutar, odeme_tipi):
         self._exec(
-            "INSERT INTO expenses(tarih, kategori, aciklama, tutar, odeme_tipi, olusturulma) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO expenses(tarih, kategori, aciklama, tutar, odeme_tipi, olusturulma, user_id) VALUES (?,?,?,?,?,?,?)",
             (tarih, kategori, aciklama, tutar, odeme_tipi,
-             datetime.now().isoformat(timespec="seconds")),
+             datetime.now().isoformat(timespec="seconds"), self.uid),
         )
 
     def update_expense(self, eid, *, tarih, kategori, aciklama, tutar, odeme_tipi):
         self._exec(
-            "UPDATE expenses SET tarih=?, kategori=?, aciklama=?, tutar=?, odeme_tipi=? WHERE id=?",
-            (tarih, kategori, aciklama, tutar, odeme_tipi, eid),
+            "UPDATE expenses SET tarih=?, kategori=?, aciklama=?, tutar=?, odeme_tipi=? WHERE id=? AND user_id=?",
+            (tarih, kategori, aciklama, tutar, odeme_tipi, eid, self.uid),
         )
 
     def delete_expense(self, eid):
-        self._exec("DELETE FROM expenses WHERE id = ?", (eid,))
+        self._exec("DELETE FROM expenses WHERE id = ? AND user_id = ?", (eid, self.uid))
 
     def total_expenses(self):
-        return self._scalar("SELECT COALESCE(SUM(tutar),0) FROM expenses") or 0
+        return self._scalar(
+            "SELECT COALESCE(SUM(tutar),0) FROM expenses WHERE user_id = ?", (self.uid,)
+        ) or 0
 
     # ===================================================================
     #  AYARLAR (anahtar/değer)
     # ===================================================================
     def get_setting(self, anahtar, default=None):
         conn = self._conn()
-        row = conn.execute("SELECT deger FROM settings WHERE anahtar = ?", (anahtar,)).fetchone()
+        row = conn.execute(
+            "SELECT deger FROM user_settings WHERE user_id = ? AND anahtar = ?",
+            (self.uid, anahtar),
+        ).fetchone()
         conn.close()
         return row["deger"] if row else default
 
     def all_settings(self):
         conn = self._conn()
-        rows = conn.execute("SELECT anahtar, deger FROM settings").fetchall()
+        rows = conn.execute(
+            "SELECT anahtar, deger FROM user_settings WHERE user_id = ?", (self.uid,)
+        ).fetchall()
         conn.close()
         return {r["anahtar"]: r["deger"] for r in rows}
 
     def set_setting(self, anahtar, deger):
         self._exec(
-            "INSERT INTO settings(anahtar, deger) VALUES (?,?) "
-            "ON CONFLICT(anahtar) DO UPDATE SET deger = excluded.deger",
-            (anahtar, deger),
+            "INSERT INTO user_settings(user_id, anahtar, deger) VALUES (?,?,?) "
+            "ON CONFLICT(user_id, anahtar) DO UPDATE SET deger = excluded.deger",
+            (self.uid, anahtar, deger),
         )
 
     # ----- AI yanıt önbelleği (token tasarrufu) ------------------------
     def get_ai_cache(self, key, ttl_saat=6):
         """Önbellekteki cevabı döndürür (TTL içinde değilse None)."""
+        key = f"{self.uid}:{key}"          # önbelleği kullanıcıya göre ayır
         conn = self._conn()
         row = conn.execute(
             "SELECT cevap, olusturma FROM ai_cache WHERE soru_hash = ?", (key,)
@@ -794,6 +862,7 @@ class SqliteRepository:
         return row["cevap"]
 
     def set_ai_cache(self, key, soru, cevap):
+        key = f"{self.uid}:{key}"          # önbelleği kullanıcıya göre ayır
         ts = datetime.now().isoformat(timespec="seconds")
         if self.is_pg:
             sql = ("INSERT INTO ai_cache(soru_hash, soru, cevap, olusturma) "
@@ -853,8 +922,9 @@ class SqliteRepository:
                       c.unvan AS musteri_unvan,
                       COALESCE((SELECT SUM(p.tutar) FROM payments p WHERE p.fatura_id=i.id),0) AS odenen
                FROM invoices i LEFT JOIN customers c ON c.id=i.musteri_id
-               WHERE i.fatura_tipi='Satış'
-               ORDER BY i.vade_tarihi ASC"""
+               WHERE i.fatura_tipi='Satış' AND i.user_id = ?
+               ORDER BY i.vade_tarihi ASC""",
+            (self.uid,),
         ).fetchall()
         conn.close()
         out = []
@@ -893,7 +963,8 @@ class SqliteRepository:
     def low_stock_products(self, threshold=5):
         conn = self._conn()
         rows = conn.execute(
-            "SELECT * FROM products WHERE stok <= ? ORDER BY stok ASC", (threshold,)
+            "SELECT * FROM products WHERE user_id = ? AND stok <= ? ORDER BY stok ASC",
+            (self.uid, threshold),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -903,14 +974,14 @@ class SqliteRepository:
         conn = self._conn()
         inv = conn.execute(
             """SELECT id, tarih, fatura_no, fatura_tipi, toplam_tutar
-               FROM invoices WHERE musteri_id = ?""",
-            (cid,),
+               FROM invoices WHERE musteri_id = ? AND user_id = ?""",
+            (cid, self.uid),
         ).fetchall()
         pay = conn.execute(
             """SELECT p.odeme_tarihi AS tarih, p.tutar, p.odeme_tipi, i.fatura_no
                FROM payments p JOIN invoices i ON i.id = p.fatura_id
-               WHERE i.musteri_id = ?""",
-            (cid,),
+               WHERE i.musteri_id = ? AND i.user_id = ?""",
+            (cid, self.uid),
         ).fetchall()
         conn.close()
 
@@ -936,14 +1007,15 @@ class SqliteRepository:
         return hareketler
 
     def _date_where(self, col, start, end):
-        clauses, params = [], []
+        # Çok kiracılı izolasyon: tüm rapor sorguları daima user_id ile filtrelenir.
+        clauses, params = ["user_id = ?"], [self.uid]
         if start:
             clauses.append(f"{self._date(col)} >= {self._date('?')}")
             params.append(start)
         if end:
             clauses.append(f"{self._date(col)} <= {self._date('?')}")
             params.append(end)
-        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        where = " WHERE " + " AND ".join(clauses)
         return where, params
 
     # ===================================================================
@@ -1015,45 +1087,51 @@ class SqliteRepository:
         if q:
             like = f"%{q}%"
             rows = conn.execute(
-                "SELECT * FROM tedarikcilar WHERE unvan LIKE ? OR vergi_no LIKE ? OR eposta LIKE ? ORDER BY id DESC",
-                (like, like, like),
+                "SELECT * FROM tedarikcilar WHERE user_id = ? AND (unvan LIKE ? OR vergi_no LIKE ? OR eposta LIKE ?) ORDER BY id DESC",
+                (self.uid, like, like, like),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM tedarikcilar ORDER BY unvan").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM tedarikcilar WHERE user_id = ? ORDER BY unvan", (self.uid,)
+            ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def get_supplier(self, sid):
         conn = self._conn()
-        row = conn.execute("SELECT * FROM tedarikcilar WHERE id = ?", (sid,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM tedarikcilar WHERE id = ? AND user_id = ?", (sid, self.uid)
+        ).fetchone()
         conn.close()
         return dict(row) if row else None
 
     def create_supplier(self, *, unvan, vergi_no, adres, telefon, eposta, notlar):
         self._exec(
-            "INSERT INTO tedarikcilar(unvan,vergi_no,adres,telefon,eposta,notlar,olusturulma) VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO tedarikcilar(unvan,vergi_no,adres,telefon,eposta,notlar,olusturulma,user_id) VALUES(?,?,?,?,?,?,?,?)",
             (unvan, vergi_no, adres, telefon, eposta, notlar,
-             datetime.now().isoformat(timespec="seconds")),
+             datetime.now().isoformat(timespec="seconds"), self.uid),
         )
 
     def update_supplier(self, sid, *, unvan, vergi_no, adres, telefon, eposta, notlar):
         self._exec(
-            "UPDATE tedarikcilar SET unvan=?,vergi_no=?,adres=?,telefon=?,eposta=?,notlar=? WHERE id=?",
-            (unvan, vergi_no, adres, telefon, eposta, notlar, sid),
+            "UPDATE tedarikcilar SET unvan=?,vergi_no=?,adres=?,telefon=?,eposta=?,notlar=? WHERE id=? AND user_id=?",
+            (unvan, vergi_no, adres, telefon, eposta, notlar, sid, self.uid),
         )
 
     def delete_supplier(self, sid):
-        self._exec("DELETE FROM tedarikcilar WHERE id=?", (sid,))
+        self._exec("DELETE FROM tedarikcilar WHERE id=? AND user_id=?", (sid, self.uid))
 
     def count_suppliers(self):
-        return self._scalar("SELECT COUNT(*) FROM tedarikcilar")
+        return self._scalar("SELECT COUNT(*) FROM tedarikcilar WHERE user_id = ?", (self.uid,))
 
     # ===================================================================
     #  KASA / BANKA HESAPLARI
     # ===================================================================
     def list_accounts(self):
         conn = self._conn()
-        rows = conn.execute("SELECT * FROM hesaplar WHERE aktif=1 ORDER BY tur,ad").fetchall()
+        rows = conn.execute(
+            "SELECT * FROM hesaplar WHERE user_id=? AND aktif=1 ORDER BY tur,ad", (self.uid,)
+        ).fetchall()
         conn.close()
         result = []
         for r in rows:
@@ -1064,7 +1142,7 @@ class SqliteRepository:
 
     def get_account(self, aid):
         conn = self._conn()
-        row = conn.execute("SELECT * FROM hesaplar WHERE id=?", (aid,)).fetchone()
+        row = conn.execute("SELECT * FROM hesaplar WHERE id=? AND user_id=?", (aid, self.uid)).fetchone()
         conn.close()
         if not row:
             return None
@@ -1074,43 +1152,47 @@ class SqliteRepository:
 
     def account_balance(self, aid):
         conn = self._conn()
-        row = conn.execute("SELECT bakiye_baslangic FROM hesaplar WHERE id=?", (aid,)).fetchone()
+        row = conn.execute(
+            "SELECT bakiye_baslangic FROM hesaplar WHERE id=? AND user_id=?", (aid, self.uid)
+        ).fetchone()
         if not row:
             conn.close()
             return 0
         baslangic = row[0] or 0
         hareketler = conn.execute(
-            "SELECT COALESCE(SUM(tutar),0) FROM hesap_hareketleri WHERE hesap_id=?", (aid,)
+            "SELECT COALESCE(SUM(tutar),0) FROM hesap_hareketleri WHERE hesap_id=? AND user_id=?",
+            (aid, self.uid),
         ).fetchone()[0] or 0
         conn.close()
         return round(baslangic + hareketler, 2)
 
     def create_account(self, *, ad, tur, para_birimi, bakiye_baslangic, aciklama):
         self._exec(
-            "INSERT INTO hesaplar(ad,tur,para_birimi,bakiye_baslangic,aciklama) VALUES(?,?,?,?,?)",
-            (ad, tur, para_birimi, bakiye_baslangic, aciklama),
+            "INSERT INTO hesaplar(ad,tur,para_birimi,bakiye_baslangic,aciklama,user_id) VALUES(?,?,?,?,?,?)",
+            (ad, tur, para_birimi, bakiye_baslangic, aciklama, self.uid),
         )
 
     def update_account(self, aid, *, ad, tur, aciklama):
-        self._exec("UPDATE hesaplar SET ad=?,tur=?,aciklama=? WHERE id=?", (ad, tur, aciklama, aid))
+        self._exec("UPDATE hesaplar SET ad=?,tur=?,aciklama=? WHERE id=? AND user_id=?",
+                   (ad, tur, aciklama, aid, self.uid))
 
     def delete_account(self, aid):
-        self._exec("DELETE FROM hesaplar WHERE id=?", (aid,))
+        self._exec("DELETE FROM hesaplar WHERE id=? AND user_id=?", (aid, self.uid))
 
     def list_account_movements(self, aid):
         conn = self._conn()
         rows = conn.execute(
-            "SELECT * FROM hesap_hareketleri WHERE hesap_id=? ORDER BY tarih DESC,id DESC",
-            (aid,),
+            "SELECT * FROM hesap_hareketleri WHERE hesap_id=? AND user_id=? ORDER BY tarih DESC,id DESC",
+            (aid, self.uid),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def add_movement(self, *, hesap_id, tarih, aciklama, tutar, tip, referans=""):
         self._exec(
-            "INSERT INTO hesap_hareketleri(hesap_id,tarih,aciklama,tutar,tip,referans,olusturulma) VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO hesap_hareketleri(hesap_id,tarih,aciklama,tutar,tip,referans,olusturulma,user_id) VALUES(?,?,?,?,?,?,?,?)",
             (hesap_id, tarih, aciklama, tutar, tip, referans,
-             datetime.now().isoformat(timespec="seconds")),
+             datetime.now().isoformat(timespec="seconds"), self.uid),
         )
 
     # ===================================================================
@@ -1118,12 +1200,12 @@ class SqliteRepository:
     # ===================================================================
     def list_checks(self, tur=None, durum=None):
         conn = self._conn()
-        clauses, params = [], []
+        clauses, params = ["user_id=?"], [self.uid]
         if tur:
             clauses.append("tur=?"); params.append(tur)
         if durum:
             clauses.append("durum=?"); params.append(durum)
-        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        where = " WHERE " + " AND ".join(clauses)
         rows = conn.execute(
             f"SELECT * FROM cek_senet{where} ORDER BY vade_tarihi ASC", params
         ).fetchall()
@@ -1132,28 +1214,28 @@ class SqliteRepository:
 
     def get_check(self, cid):
         conn = self._conn()
-        row = conn.execute("SELECT * FROM cek_senet WHERE id=?", (cid,)).fetchone()
+        row = conn.execute("SELECT * FROM cek_senet WHERE id=? AND user_id=?", (cid, self.uid)).fetchone()
         conn.close()
         return dict(row) if row else None
 
     def create_check(self, *, tur, taraf, tutar, vade_tarihi, durum, notlar):
         self._exec(
-            "INSERT INTO cek_senet(tur,taraf,tutar,vade_tarihi,durum,notlar,olusturulma) VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO cek_senet(tur,taraf,tutar,vade_tarihi,durum,notlar,olusturulma,user_id) VALUES(?,?,?,?,?,?,?,?)",
             (tur, taraf, tutar, vade_tarihi, durum, notlar,
-             datetime.now().isoformat(timespec="seconds")),
+             datetime.now().isoformat(timespec="seconds"), self.uid),
         )
 
     def update_check(self, cid, *, tur, taraf, tutar, vade_tarihi, durum, notlar):
         self._exec(
-            "UPDATE cek_senet SET tur=?,taraf=?,tutar=?,vade_tarihi=?,durum=?,notlar=? WHERE id=?",
-            (tur, taraf, tutar, vade_tarihi, durum, notlar, cid),
+            "UPDATE cek_senet SET tur=?,taraf=?,tutar=?,vade_tarihi=?,durum=?,notlar=? WHERE id=? AND user_id=?",
+            (tur, taraf, tutar, vade_tarihi, durum, notlar, cid, self.uid),
         )
 
     def set_check_status(self, cid, durum):
-        self._exec("UPDATE cek_senet SET durum=? WHERE id=?", (durum, cid))
+        self._exec("UPDATE cek_senet SET durum=? WHERE id=? AND user_id=?", (durum, cid, self.uid))
 
     def delete_check(self, cid):
-        self._exec("DELETE FROM cek_senet WHERE id=?", (cid,))
+        self._exec("DELETE FROM cek_senet WHERE id=? AND user_id=?", (cid, self.uid))
 
     # ===================================================================
     #  STOK HAREKETLERİ
@@ -1163,26 +1245,27 @@ class SqliteRepository:
         if pid:
             rows = conn.execute(
                 "SELECT s.*, p.name AS urun_adi FROM stok_hareketleri s "
-                "JOIN products p ON p.id=s.urun_id WHERE s.urun_id=? ORDER BY s.id DESC",
-                (pid,),
+                "JOIN products p ON p.id=s.urun_id WHERE s.urun_id=? AND s.user_id=? ORDER BY s.id DESC",
+                (pid, self.uid),
             ).fetchall()
         else:
             rows = conn.execute(
                 "SELECT s.*, p.name AS urun_adi FROM stok_hareketleri s "
-                "JOIN products p ON p.id=s.urun_id ORDER BY s.id DESC LIMIT 200"
+                "JOIN products p ON p.id=s.urun_id WHERE s.user_id=? ORDER BY s.id DESC LIMIT 200",
+                (self.uid,),
             ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def add_stock_movement(self, *, urun_id, tur, miktar, aciklama="", referans=""):
         self._exec(
-            "INSERT INTO stok_hareketleri(urun_id,tur,miktar,aciklama,referans,olusturulma) VALUES(?,?,?,?,?,?)",
+            "INSERT INTO stok_hareketleri(urun_id,tur,miktar,aciklama,referans,olusturulma,user_id) VALUES(?,?,?,?,?,?,?)",
             (urun_id, tur, miktar, aciklama, referans,
-             datetime.now().isoformat(timespec="seconds")),
+             datetime.now().isoformat(timespec="seconds"), self.uid),
         )
-        # Stok güncelle
+        # Stok güncelle (yalnızca kendi ürünü)
         delta = miktar if tur == "Giriş" else -miktar
-        self._exec("UPDATE products SET stok = stok + ? WHERE id=?", (delta, urun_id))
+        self._exec("UPDATE products SET stok = stok + ? WHERE id=? AND user_id=?", (delta, urun_id, self.uid))
 
     # ===================================================================
     #  BÜTÇE
@@ -1190,16 +1273,17 @@ class SqliteRepository:
     def list_budgets(self, yil, ay):
         conn = self._conn()
         rows = conn.execute(
-            "SELECT * FROM butce WHERE yil=? AND ay=? ORDER BY kategori", (yil, ay)
+            "SELECT * FROM user_butce WHERE user_id=? AND yil=? AND ay=? ORDER BY kategori",
+            (self.uid, yil, ay),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def set_budget(self, yil, ay, kategori, hedef_tutar):
         self._exec(
-            "INSERT INTO butce(yil,ay,kategori,hedef_tutar) VALUES(?,?,?,?) "
-            "ON CONFLICT(yil,ay,kategori) DO UPDATE SET hedef_tutar=excluded.hedef_tutar",
-            (yil, ay, kategori, hedef_tutar),
+            "INSERT INTO user_butce(user_id,yil,ay,kategori,hedef_tutar) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(user_id,yil,ay,kategori) DO UPDATE SET hedef_tutar=excluded.hedef_tutar",
+            (self.uid, yil, ay, kategori, hedef_tutar),
         )
 
     def budget_actual(self, yil, ay):
@@ -1208,8 +1292,8 @@ class SqliteRepository:
         conn = self._conn()
         rows = conn.execute(
             "SELECT kategori, COALESCE(SUM(tutar),0) AS toplam FROM expenses "
-            "WHERE substr(tarih,1,7)=? GROUP BY kategori",
-            (ay_str,),
+            "WHERE user_id=? AND substr(tarih,1,7)=? GROUP BY kategori",
+            (self.uid, ay_str),
         ).fetchall()
         conn.close()
         return {r["kategori"]: r["toplam"] for r in rows}
@@ -1227,7 +1311,8 @@ class SqliteRepository:
     def list_audit_logs(self, limit=200):
         conn = self._conn()
         rows = conn.execute(
-            "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT * FROM audit_log WHERE kullanici_id=? ORDER BY id DESC LIMIT ?",
+            (self.uid, limit),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -1239,24 +1324,26 @@ class SqliteRepository:
         conn = self._conn()
         rows = conn.execute(
             """SELECT r.*, c.unvan AS musteri_unvan FROM tekrarlayan_faturalar r
-               LEFT JOIN customers c ON c.id=r.musteri_id ORDER BY r.id DESC"""
+               LEFT JOIN customers c ON c.id=r.musteri_id
+               WHERE r.user_id=? ORDER BY r.id DESC""",
+            (self.uid,),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
     def create_recurring(self, *, musteri_id, aciklama, tutar, kdv, periyot, sonraki_tarih):
         self._exec(
-            "INSERT INTO tekrarlayan_faturalar(musteri_id,aciklama,tutar,kdv,periyot,sonraki_tarih,aktif,olusturulma) VALUES(?,?,?,?,?,?,1,?)",
+            "INSERT INTO tekrarlayan_faturalar(musteri_id,aciklama,tutar,kdv,periyot,sonraki_tarih,aktif,olusturulma,user_id) VALUES(?,?,?,?,?,?,1,?,?)",
             (musteri_id, aciklama, tutar, kdv, periyot, sonraki_tarih,
-             datetime.now().isoformat(timespec="seconds")),
+             datetime.now().isoformat(timespec="seconds"), self.uid),
         )
 
     def get_recurring(self, rid):
         conn = self._conn()
         row = conn.execute(
             """SELECT r.*, c.unvan AS musteri_unvan FROM tekrarlayan_faturalar r
-               LEFT JOIN customers c ON c.id=r.musteri_id WHERE r.id=?""",
-            (rid,),
+               LEFT JOIN customers c ON c.id=r.musteri_id WHERE r.id=? AND r.user_id=?""",
+            (rid, self.uid),
         ).fetchone()
         conn.close()
         return dict(row) if row else None
@@ -1265,24 +1352,26 @@ class SqliteRepository:
         self._exec(
             """UPDATE tekrarlayan_faturalar
                SET musteri_id=?, aciklama=?, tutar=?, kdv=?, periyot=?, sonraki_tarih=?
-               WHERE id=?""",
-            (musteri_id, aciklama, tutar, kdv, periyot, sonraki_tarih, rid),
+               WHERE id=? AND user_id=?""",
+            (musteri_id, aciklama, tutar, kdv, periyot, sonraki_tarih, rid, self.uid),
         )
 
     def toggle_recurring(self, rid):
         conn = self._conn()
-        row = conn.execute("SELECT aktif FROM tekrarlayan_faturalar WHERE id=?", (rid,)).fetchone()
+        row = conn.execute(
+            "SELECT aktif FROM tekrarlayan_faturalar WHERE id=? AND user_id=?", (rid, self.uid)
+        ).fetchone()
         conn.close()
         if row:
-            self._exec("UPDATE tekrarlayan_faturalar SET aktif=? WHERE id=?",
-                       (0 if row[0] else 1, rid))
+            self._exec("UPDATE tekrarlayan_faturalar SET aktif=? WHERE id=? AND user_id=?",
+                       (0 if row[0] else 1, rid, self.uid))
 
     def fire_recurring(self, rid):
         """Tekrarlayan faturadan yeni fatura oluşturur ve sonraki tarihi günceller."""
         conn = self._conn()
         r = conn.execute(
             "SELECT r.*, c.unvan AS musteri_unvan FROM tekrarlayan_faturalar r "
-            "LEFT JOIN customers c ON c.id=r.musteri_id WHERE r.id=?", (rid,)
+            "LEFT JOIN customers c ON c.id=r.musteri_id WHERE r.id=? AND r.user_id=?", (rid, self.uid)
         ).fetchone()
         conn.close()
         if not r:
@@ -1319,12 +1408,12 @@ class SqliteRepository:
             m = dt.month % 12 + 1
             y = dt.year + (1 if dt.month == 12 else 0)
             dt = dt.replace(year=y, month=m)
-        self._exec("UPDATE tekrarlayan_faturalar SET sonraki_tarih=? WHERE id=?",
-                   (dt.isoformat(), rid))
+        self._exec("UPDATE tekrarlayan_faturalar SET sonraki_tarih=? WHERE id=? AND user_id=?",
+                   (dt.isoformat(), rid, self.uid))
         return fatura_no
 
     def delete_recurring(self, rid):
-        self._exec("DELETE FROM tekrarlayan_faturalar WHERE id=?", (rid,))
+        self._exec("DELETE FROM tekrarlayan_faturalar WHERE id=? AND user_id=?", (rid, self.uid))
 
     # ===================================================================
     #  BİLDİRİM / DASHBOARD UYARILARI
@@ -1339,9 +1428,10 @@ class SqliteRepository:
         # Vadesi geçmiş faturalar
         vadesi_gecmis = conn.execute(
             """SELECT COUNT(*) FROM invoices i WHERE fatura_tipi='Satış'
+               AND i.user_id = ?
                AND vade_tarihi < ? AND vade_tarihi IS NOT NULL
                AND (SELECT COALESCE(SUM(p.tutar),0) FROM payments p WHERE p.fatura_id=i.id) < i.toplam_tutar""",
-            (bugun,)
+            (self.uid, bugun)
         ).fetchone()[0]
         if vadesi_gecmis:
             alerts.append({"tip": "danger", "ikon": "⏰",
@@ -1350,7 +1440,7 @@ class SqliteRepository:
 
         # Düşük stok
         dusuk = conn.execute(
-            "SELECT COUNT(*) FROM products WHERE stok <= 5"
+            "SELECT COUNT(*) FROM products WHERE user_id = ? AND stok <= 5", (self.uid,)
         ).fetchone()[0]
         if dusuk:
             alerts.append({"tip": "warning", "ikon": "📦",
@@ -1361,8 +1451,8 @@ class SqliteRepository:
         from datetime import timedelta
         yedi_gun = (date.today() + timedelta(days=7)).isoformat()
         bekleyen_cek = conn.execute(
-            "SELECT COUNT(*) FROM cek_senet WHERE durum='Beklemede' AND vade_tarihi <= ?",
-            (yedi_gun,)
+            "SELECT COUNT(*) FROM cek_senet WHERE user_id=? AND durum='Beklemede' AND vade_tarihi <= ?",
+            (self.uid, yedi_gun)
         ).fetchone()[0]
         if bekleyen_cek:
             alerts.append({"tip": "info", "ikon": "🏦",
@@ -1385,15 +1475,16 @@ class SqliteRepository:
         alacaklar = conn.execute(
             """SELECT vade_tarihi, COALESCE(SUM(toplam_tutar),0) - COALESCE(
                 (SELECT SUM(p.tutar) FROM payments p WHERE p.fatura_id=i.id),0) AS kalan
-               FROM invoices i WHERE fatura_tipi='Satış' AND vade_tarihi IS NOT NULL
-               GROUP BY vade_tarihi HAVING kalan > 0"""
+               FROM invoices i WHERE fatura_tipi='Satış' AND i.user_id=? AND vade_tarihi IS NOT NULL
+               GROUP BY vade_tarihi HAVING kalan > 0""",
+            (self.uid,),
         ).fetchall()
 
         # Son 3 ay ortalama gider
         uc_ay_once = (bugun - timedelta(days=90)).isoformat()
         aylik_gider = conn.execute(
-            "SELECT COALESCE(SUM(tutar),0)/3.0 FROM expenses WHERE tarih >= ?",
-            (uc_ay_once,)
+            "SELECT COALESCE(SUM(tutar),0)/3.0 FROM expenses WHERE user_id=? AND tarih >= ?",
+            (self.uid, uc_ay_once)
         ).fetchone()[0] or 0
         conn.close()
 
@@ -1425,19 +1516,23 @@ class SqliteRepository:
         conn = self._conn()
         # Varlıklar
         kasa_banka = sum(self.account_balance(r["id"])
-                         for r in conn.execute("SELECT id FROM hesaplar WHERE aktif=1").fetchall())
+                         for r in conn.execute(
+                             "SELECT id FROM hesaplar WHERE user_id=? AND aktif=1", (self.uid,)
+                         ).fetchall())
         alacaklar = conn.execute(
             """SELECT COALESCE(SUM(i.toplam_tutar),0) -
-               COALESCE((SELECT SUM(p.tutar) FROM payments p),0) FROM invoices i
-               WHERE fatura_tipi='Satış'"""
+               COALESCE((SELECT SUM(p.tutar) FROM payments p WHERE p.user_id=?),0) FROM invoices i
+               WHERE fatura_tipi='Satış' AND i.user_id=?""",
+            (self.uid, self.uid),
         ).fetchone()[0] or 0
         stok_degeri = conn.execute(
-            "SELECT COALESCE(SUM(birim_fiyat*stok),0) FROM products"
+            "SELECT COALESCE(SUM(birim_fiyat*stok),0) FROM products WHERE user_id=?", (self.uid,)
         ).fetchone()[0] or 0
 
         # Yükümlülükler
         borclar = conn.execute(
-            """SELECT COALESCE(SUM(toplam_tutar),0) FROM invoices WHERE fatura_tipi='Alış'"""
+            """SELECT COALESCE(SUM(toplam_tutar),0) FROM invoices WHERE fatura_tipi='Alış' AND user_id=?""",
+            (self.uid,),
         ).fetchone()[0] or 0
         conn.close()
 
@@ -1471,13 +1566,14 @@ class SqliteRepository:
         def ay_gelir(ay_str):
             return self._scalar(
                 "SELECT COALESCE(SUM(toplam_tutar),0) FROM invoices "
-                "WHERE fatura_tipi='Satış' AND substr(tarih,1,7)=?", (ay_str,)
+                "WHERE user_id=? AND fatura_tipi='Satış' AND substr(tarih,1,7)=?",
+                (self.uid, ay_str)
             ) or 0
 
         def ay_gider(ay_str):
             return self._scalar(
-                "SELECT COALESCE(SUM(tutar),0) FROM expenses WHERE substr(tarih,1,7)=?",
-                (ay_str,)
+                "SELECT COALESCE(SUM(tutar),0) FROM expenses WHERE user_id=? AND substr(tarih,1,7)=?",
+                (self.uid, ay_str)
             ) or 0
 
         return {
@@ -1494,12 +1590,13 @@ class SqliteRepository:
                COALESCE(SUM(i.toplam_tutar),0) AS ciro,
                COALESCE((SELECT SUM(p.tutar) FROM payments p
                          JOIN invoices ii ON ii.id=p.fatura_id
-                         WHERE ii.musteri_id=c.id),0) AS odenen,
+                         WHERE ii.musteri_id=c.id AND ii.user_id=?),0) AS odenen,
                COUNT(i.id) AS fatura_sayisi
                FROM customers c
-               LEFT JOIN invoices i ON i.musteri_id=c.id AND i.fatura_tipi='Satış'
+               LEFT JOIN invoices i ON i.musteri_id=c.id AND i.fatura_tipi='Satış' AND i.user_id=?
+               WHERE c.user_id=?
                GROUP BY c.id ORDER BY ciro DESC LIMIT ?""",
-            (limit,),
+            (self.uid, self.uid, self.uid, limit),
         ).fetchall()
         conn.close()
         result = []
@@ -1580,8 +1677,15 @@ def get_repo():
         if backend == "firebase":
             # Geçişte: from .firebase_repo import FirebaseRepository
             raise NotImplementedError("Firebase backend henüz eklenmedi.")
+        uid = None
+        try:
+            from flask import session
+            uid = session.get("user_id")
+        except Exception:
+            uid = None
         g.repo = SqliteRepository(
             current_app.config.get("DATABASE_URL", ""),
             current_app.config["SQLITE_PATH"],
+            uid,
         )
     return g.repo

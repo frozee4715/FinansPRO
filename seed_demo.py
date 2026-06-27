@@ -254,6 +254,42 @@ def _has_business_data(repo):
         conn.close()
 
 
+def claim_orphans(repo, uid):
+    """Sahipsiz (user_id NULL) mevcut iş verisini demo kullanıcısına bağlar ve
+    eski global 'settings' tablosunu user_settings'e taşır. Idempotent."""
+    tablolar = [
+        "customers", "products", "invoices", "payments", "expenses",
+        "tedarikcilar", "hesaplar", "hesap_hareketleri", "cek_senet",
+        "stok_hareketleri", "butce", "tekrarlayan_faturalar",
+    ]
+    conn = repo._conn()
+    for t in tablolar:
+        try:
+            conn.execute(f"UPDATE {t} SET user_id=? WHERE user_id IS NULL", (uid,))
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    # Eski global ayarları kullanıcı bazlı tabloya taşı
+    try:
+        rows = conn.execute("SELECT anahtar, deger FROM settings").fetchall()
+        for r in rows:
+            conn.execute(
+                "INSERT INTO user_settings(user_id,anahtar,deger) VALUES(?,?,?) "
+                "ON CONFLICT(user_id,anahtar) DO UPDATE SET deger=excluded.deger",
+                (uid, r["anahtar"], r["deger"]),
+            )
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    conn.close()
+
+
 def seed():
     """ELLE tam sıfırlama: tüm veriyi siler, demo hesabı + zengin demo veri kurar."""
     init_schema(CFG)
@@ -262,9 +298,9 @@ def seed():
     print(f"DB: {'PostgreSQL' if IS_PG else DB_PATH}")
     wipe(repo)
     print("• Eski veriler temizlendi.")
-    _ensure_demo_user(repo)
+    uid = _ensure_demo_user(repo)
     print(f"• Demo hesabı: {DEMO_EMAIL} / {DEMO_PASS} (Pro)")
-    populate(repo)
+    populate(SqliteRepository(DB_URL, DB_PATH, uid))   # veriyi demo'ya ait olarak kur
     print("\n[OK] Demo veritabanı hazır.")
     print(f"   Giriş: {DEMO_EMAIL}  |  Şifre: {DEMO_PASS}")
     print("   Admin: yalnızca ADMIN_EMAIL/ADMIN_PASSWORD ayarlıysa açılışta oluşur.")
@@ -276,10 +312,12 @@ def seed_if_empty():
     Tohumlama yapıldıysa True döner."""
     init_schema(CFG)
     repo = SqliteRepository(DB_URL, DB_PATH)
-    _ensure_demo_user(repo)
+    uid = _ensure_demo_user(repo)
+    # Çok kiracılı geçiş: mevcut sahipsiz veriyi demo'ya bağla
+    claim_orphans(repo, uid)
     if _has_business_data(repo):
         return False
-    populate(repo)
+    populate(SqliteRepository(DB_URL, DB_PATH, uid))
     return True
 
 
