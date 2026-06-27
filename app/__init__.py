@@ -22,6 +22,8 @@ def create_app(config_class=Config):
 
     # Veritabanı şemasını hazırla (idempotent) ve varsayılan admini oluştur
     with app.app_context():
+        _backend = "PostgreSQL" if app.config.get("DATABASE_URL") else "SQLite"
+        app.logger.warning("Veritabanı motoru: %s", _backend)
         init_schema(app.config)
 
     # Blueprint'ler
