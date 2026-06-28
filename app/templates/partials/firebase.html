@@ -1,7 +1,7 @@
 {% if FCM_API_KEY %}
 <!-- Firebase Cloud Messaging -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js" defer></script>
 <script>
     window.FCM_CONFIG = {
         apiKey:            {{ FCM_API_KEY | tojson }},
@@ -13,5 +13,5 @@
     };
     window.FCM_VAPID_KEY = {{ FCM_VAPID_KEY | tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/firebase-push.js') }}"></script>
+<script src="{{ url_for('static', filename='js/firebase-push.js') }}" defer></script>
 {% endif %}
