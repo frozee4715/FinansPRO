@@ -185,13 +185,8 @@
         crossorigin="anonymous" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Emoji dönüşümünü ilk boyamadan sonra (boşta) yap → metin daha hızlı görünür
-        var emojiParse = function () {
-            if (window.twemoji) twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
-        };
-        (window.requestIdleCallback || window.setTimeout)(emojiParse, 1);
-
         // CSRF token'ını tüm POST formlarına otomatik enjekte et
+        // (KRİTİK: en önce çalışsın; başka bir hata bunu engellemesin)
         var csrfToken = document.querySelector('meta[name="csrf-token"]');
         if (csrfToken) {
             var token = csrfToken.getAttribute('content');
@@ -206,6 +201,17 @@
                 }
             });
         }
+
+        // Emoji dönüşümünü ilk boyamadan sonra (boşta) yap → metin daha hızlı görünür.
+        // requestIdleCallback'i window bağlamında çağır (aksi halde "Illegal
+        // invocation" hatası verir); yoksa setTimeout'a düş. try/catch ile izole.
+        var emojiParse = function () {
+            try {
+                if (window.twemoji) twemoji.parse(document.body, { folder: 'svg', ext: '.svg' });
+            } catch (e) {}
+        };
+        if (window.requestIdleCallback) { window.requestIdleCallback(emojiParse); }
+        else { window.setTimeout(emojiParse, 1); }
 
         // Kenar menü kaydırma konumunu sayfalar arası koru
         // (alttaki öğelere tıklayınca menü başa dönmesin)
