@@ -66,6 +66,10 @@ def login_user(user):
     session["user_id"] = user["id"]
     session["user_name"] = user["name"]
     session["user_role"] = user.get("rol") or "kullanici"
+    # CSRF token'ı giriş anında sabitle: session.clear sonrası ilk render'da
+    # üretilmesini bekleme — eşzamanlı isteklerde farklı token üretimi/yarış
+    # (ve form↔oturum uyuşmazlığı kaynaklı 403) olasılığını ortadan kaldırır.
+    session["_csrf_token"] = secrets.token_hex(32)
     session.permanent = True
 
 

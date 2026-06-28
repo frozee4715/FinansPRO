@@ -243,22 +243,6 @@
         window.addEventListener('pageshow', function () { bar.classList.remove('go'); });
     })();
 </script>
-
-<!-- Sayfa ön-getirme (Speculation Rules): menüye gelince hedef sayfa arka planda
-     çekilir → tıklayınca anında açılır. Çıkış ve [data-no-prefetch] hariç. -->
-<script type="speculationrules">
-{
-  "prefetch": [{
-    "source": "document",
-    "where": { "and": [
-      { "href_matches": "/*" },
-      { "not": { "href_matches": "/cikis" } },
-      { "not": { "selector_matches": "[data-no-prefetch]" } }
-    ] },
-    "eagerness": "moderate"
-  }]
-}
-</script>
 {% block scripts %}{% endblock %}
 {% if current_user %}{% include 'partials/firebase.html' %}{% endif %}
 </body>

@@ -120,8 +120,7 @@ def create_app(config_class=Config):
         # CSP: kendi kaynaklarımız + izin verilen CDN'ler
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'inline-speculation-rules' "
-                "https://cdn.jsdelivr.net "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net "
                 "https://www.gstatic.com https://apis.google.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
