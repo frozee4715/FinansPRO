@@ -91,9 +91,13 @@ class _PgCursor:
 
 
 class _PgConn:
-    """psycopg connection'ı sqlite3 Connection arayüzüne benzetir."""
-    def __init__(self, raw):
+    """psycopg connection'ı sqlite3 Connection arayüzüne benzetir.
+
+    pool verilirse close() bağlantıyı kapatmaz, havuza geri verir (sıcak tutar).
+    """
+    def __init__(self, raw, pool=None):
         self._raw = raw
+        self._pool = pool
 
     def execute(self, sql, params=None):
         cur = self._raw.cursor()
@@ -110,13 +114,42 @@ class _PgConn:
         self._raw.rollback()
 
     def close(self):
-        self._raw.close()
+        if self._pool is not None:
+            try:
+                self._pool.putconn(self._raw)   # havuza geri ver (kapatma)
+                return
+            except Exception:
+                pass
+        try:
+            self._raw.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
-# Bağlantı yönetimi
+# Bağlantı yönetimi + havuz (performans: her sorguda el sıkışmasını önler)
 # ---------------------------------------------------------------------------
+# İşlem (process) başına tek havuz. --preload ile uygulama master'da yüklense de
+# havuz tembel (ilk istekte, fork SONRASI) oluşturulur → her işçinin kendi havuzu.
+_PG_POOL = None
+
+
+def _get_pool(url):
+    global _PG_POOL
+    if _PG_POOL is None:
+        from psycopg_pool import ConnectionPool
+        _PG_POOL = ConnectionPool(
+            url,
+            min_size=1, max_size=8,
+            kwargs={"row_factory": _pg_rowf, "autocommit": False},
+            timeout=30, open=False,
+        )
+        _PG_POOL.open()
+    return _PG_POOL
+
+
 def _connect(url, path):
+    """Doğrudan (havuzsuz) bağlantı — şema kurulumu/tohumlama için (açılışta tek sefer)."""
     if url:
         if psycopg is None:
             raise RuntimeError("psycopg kurulu değil ama DATABASE_URL verilmiş.")
@@ -349,7 +382,14 @@ class SqliteRepository:
         self.uid = uid
 
     def _conn(self):
-        return _connect(self.url, self.path)
+        # Postgres: havuzdan sıcak bağlantı al (el sıkışma maliyeti yok).
+        if self.url:
+            pool = _get_pool(self.url)
+            return _PgConn(pool.getconn(), pool)
+        conn = sqlite3.connect(self.path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
 
     def _date(self, expr):
         """Tarih kısmına indirger: SQLite date(x) / Postgres (x)::date."""

@@ -142,13 +142,14 @@ def create_app(config_class=Config):
     def inject_brand():
         try:
             repo = get_repo()
-            para          = repo.get_setting("para_birimi")    or app.config["DEFAULT_CURRENCY"]
-            renk          = repo.get_setting("marka_renk")     or ""
-            ikincil       = repo.get_setting("ikincil_renk")   or ""
-            yazi_tipi     = repo.get_setting("yazi_tipi")      or ""
-            kose_yuvarlak = repo.get_setting("kose_yuvarlak")  or ""
-            kompakt_mod   = repo.get_setting("kompakt_mod")    or ""
-            sidebar_gen   = repo.get_setting("sidebar_genislik") or ""
+            ayar = repo.all_settings()        # tek sorgu (7 ayrı sorgu yerine)
+            para          = ayar.get("para_birimi")     or app.config["DEFAULT_CURRENCY"]
+            renk          = ayar.get("marka_renk")      or ""
+            ikincil       = ayar.get("ikincil_renk")    or ""
+            yazi_tipi     = ayar.get("yazi_tipi")       or ""
+            kose_yuvarlak = ayar.get("kose_yuvarlak")   or ""
+            kompakt_mod   = ayar.get("kompakt_mod")     or ""
+            sidebar_gen   = ayar.get("sidebar_genislik") or ""
         except Exception:
             para, renk, ikincil, yazi_tipi, kose_yuvarlak, kompakt_mod, sidebar_gen = (
                 app.config["DEFAULT_CURRENCY"], "", "", "", "", "", ""
