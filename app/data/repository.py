@@ -5,6 +5,7 @@ Tek bir arayüz (SqliteRepository) tüm CRUD işlemlerini sağlar. Firebase'e
 geçişte aynı metod imzalarına sahip FirebaseRepository yazılır ve
 get_repo() onu döndürür.
 """
+import os
 import re
 import sqlite3
 from datetime import datetime, timedelta
@@ -132,11 +133,15 @@ class _PgConn:
 # İşlem (process) başına tek havuz. --preload ile uygulama master'da yüklense de
 # havuz tembel (ilk istekte, fork SONRASI) oluşturulur → her işçinin kendi havuzu.
 _PG_POOL = None
+_PG_POOL_PID = None
 
 
 def _get_pool(url):
-    global _PG_POOL
-    if _PG_POOL is None:
+    """İşlem (process) başına havuz. fork sonrası miras alınan havuz kullanılmaz;
+    PID değişince (her gunicorn işçisinde) o işçiye özel yeni havuz kurulur."""
+    global _PG_POOL, _PG_POOL_PID
+    pid = os.getpid()
+    if _PG_POOL is None or _PG_POOL_PID != pid:
         from psycopg_pool import ConnectionPool
         _PG_POOL = ConnectionPool(
             url,
@@ -145,6 +150,7 @@ def _get_pool(url):
             timeout=30, open=False,
         )
         _PG_POOL.open()
+        _PG_POOL_PID = pid
     return _PG_POOL
 
 
