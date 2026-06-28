@@ -10,19 +10,19 @@
     <!-- Sol: Form -->
     <div style="display:flex; flex-direction:column; gap:16px;">
 
-        <!-- Fatura fotoğrafından otomatik doldurma (AI) -->
+        <!-- Belge / Fotoğraftan otomatik doldurma -->
         <div class="card" style="border:1px dashed var(--primary);">
             <div class="card-pad" style="display:flex; flex-direction:column; gap:12px;">
                 <div style="display:flex; align-items:center; gap:10px;">
-                    <span style="font-size:1.6rem;">📷</span>
+                    <span style="font-size:1.6rem;">🧾</span>
                     <div>
-                        <div style="font-weight:700;">Fatura Fotoğrafından Doldur</div>
-                        <div class="muted" style="font-size:.82rem;">Faturanın fotoğrafını çek veya yükle; alanlar otomatik dolsun.</div>
+                        <div style="font-weight:700;">Belge / Fotoğraftan Doldur</div>
+                        <div class="muted" style="font-size:.82rem;">e-Fatura/e-Arşiv (XML/PDF) yükle → kodla kesin okunur. Kağıt fiş için fotoğraf çek → AI okur.</div>
                     </div>
                 </div>
-                <input id="faturaFoto" type="file" accept="image/*" capture="environment" class="input" style="padding:8px;">
+                <input id="faturaFoto" type="file" accept=".xml,.pdf,image/*" class="input" style="padding:8px;">
                 <div style="display:flex; gap:10px; align-items:center;">
-                    <button type="button" id="okuBtn" class="btn btn-primary btn-sm">✨ Fotoğraftan Oku</button>
+                    <button type="button" id="okuBtn" class="btn btn-primary btn-sm">✨ Belgeden Oku</button>
                     <span id="okuDurum" class="muted" style="font-size:.84rem;"></span>
                 </div>
             </div>
@@ -210,18 +210,77 @@ function hesapla() {
 document.querySelectorAll('.calc').forEach(function(el) { el.addEventListener('input', hesapla); });
 hesapla();
 
-// ---- Fatura fotoğrafından otomatik doldurma ----
+// ---- Belge / fotoğraftan otomatik doldurma ----
 (function() {
     var dosya  = document.getElementById('faturaFoto');
     var btn    = document.getElementById('okuBtn');
     var durum  = document.getElementById('okuDurum');
     if (!btn) return;
 
+    function csrf() {
+        var token = document.querySelector('meta[name="csrf-token"]');
+        return token ? token.getAttribute('content') : '';
+    }
+
     function setVal(name, value) {
         var el = document.querySelector('[name=' + name + ']');
         if (el && value !== undefined && value !== null && String(value).trim() !== '') {
             el.value = value;
         }
+    }
+
+    // Sunucudan dönen veriyi forma yansıtır; kaynağa göre durum mesajı kurar.
+    function formuDoldur(j) {
+        var v = j.veri || {};
+        setVal('fatura_no', v.fatura_no);
+        setVal('tarih', v.tarih);
+        setVal('vade_tarihi', v.vade_tarihi);
+        setVal('urun_kodu', v.urun_kodu);
+        setVal('aciklama', v.aciklama);
+        setVal('birim_fiyat', v.birim_fiyat);
+        setVal('miktar', v.miktar);
+        setVal('iskonto', v.iskonto);
+        setVal('kdv', v.kdv);
+
+        if (v.fatura_tipi) {
+            var tip = document.querySelector('[name=fatura_tipi]');
+            if (tip) {
+                var hedef = (String(v.fatura_tipi).toLowerCase().indexOf('al') === 0) ? 'Alış' : 'Satış';
+                tip.value = hedef;
+            }
+        }
+
+        var notlar = [];
+        if (j.musteri_id) {
+            var sel = document.querySelector('[name=musteri_id]');
+            if (sel) sel.value = j.musteri_id;
+        } else if (v.musteri_adi) {
+            notlar.push('Müşteri "' + v.musteri_adi + '" eşleşmedi, elle seçin');
+        }
+
+        hesapla();
+        var ek = notlar.length ? ' — ' + notlar.join('; ') : '';
+        if (j.kaynak === 'xml' || j.kaynak === 'pdf-xml') {
+            durum.textContent = '✅ e-Fatura kodla okundu (kesin)' + ek + '.';
+        } else {
+            durum.textContent = '✅ AI ile okundu — rakamları kontrol edin' + ek + '.';
+        }
+    }
+
+    function isle(promise) {
+        return promise.then(function(r) {
+            return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+        }).then(function(res) {
+            if (!res.ok || !res.j || !res.j.ok) {
+                durum.textContent = '⚠️ ' + (res.j && res.j.hata ? res.j.hata : 'Okunamadı.');
+                return;
+            }
+            formuDoldur(res.j);
+        }).catch(function(err) {
+            durum.textContent = '⚠️ Hata: ' + err;
+        }).finally(function() {
+            btn.disabled = false;
+        });
     }
 
     // Görseli tarayıcıda küçült (max 1600px, JPEG) → küçük data URL
@@ -250,68 +309,46 @@ hesapla();
         });
     }
 
+    // Fotoğraf → tarayıcıda küçült + AI okuma (/oku, JSON)
+    function fotograftanOku(file) {
+        durum.textContent = '⏳ Fatura okunuyor (AI), lütfen bekleyin…';
+        kucult(file).then(function(dataUrl) {
+            isle(fetch('{{ url_for("invoices.oku") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                body: JSON.stringify({ image: dataUrl })
+            }));
+        }).catch(function(err) {
+            durum.textContent = '⚠️ Hata: ' + err;
+            btn.disabled = false;
+        });
+    }
+
+    // XML/PDF → sunucuda kodla parse (/belge-yukle, multipart)
+    function belgedenOku(file) {
+        durum.textContent = '⏳ Belge okunuyor…';
+        var fd = new FormData();
+        fd.append('dosya', file);
+        isle(fetch('{{ url_for("invoices.belge_yukle") }}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf() },
+            body: fd
+        }));
+    }
+
     btn.addEventListener('click', function() {
         if (!dosya.files || !dosya.files[0]) {
-            durum.textContent = 'Önce bir fotoğraf seçin.';
+            durum.textContent = 'Önce bir belge veya fotoğraf seçin.';
             return;
         }
         btn.disabled = true;
-        durum.textContent = '⏳ Fatura okunuyor, lütfen bekleyin…';
-
-        kucult(dosya.files[0]).then(function(dataUrl) {
-            var token = document.querySelector('meta[name="csrf-token"]');
-            return fetch('{{ url_for("invoices.oku") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': token ? token.getAttribute('content') : ''
-                },
-                body: JSON.stringify({ image: dataUrl })
-            });
-        }).then(function(r) {
-            return r.json().then(function(j) { return { ok: r.ok, j: j }; });
-        }).then(function(res) {
-            var j = res.j;
-            if (!res.ok || !j.ok) {
-                durum.textContent = '⚠️ ' + (j && j.hata ? j.hata : 'Okunamadı.');
-                return;
-            }
-            var v = j.veri || {};
-            setVal('fatura_no', v.fatura_no);
-            setVal('tarih', v.tarih);
-            setVal('vade_tarihi', v.vade_tarihi);
-            setVal('urun_kodu', v.urun_kodu);
-            setVal('aciklama', v.aciklama);
-            setVal('birim_fiyat', v.birim_fiyat);
-            setVal('miktar', v.miktar);
-            setVal('iskonto', v.iskonto);
-            setVal('kdv', v.kdv);
-
-            // Fatura tipi
-            if (v.fatura_tipi) {
-                var tip = document.querySelector('[name=fatura_tipi]');
-                if (tip) {
-                    var hedef = (String(v.fatura_tipi).toLowerCase().indexOf('al') === 0) ? 'Alış' : 'Satış';
-                    tip.value = hedef;
-                }
-            }
-            // Müşteri eşleşmesi
-            var notlar = [];
-            if (j.musteri_id) {
-                var sel = document.querySelector('[name=musteri_id]');
-                if (sel) sel.value = j.musteri_id;
-            } else if (v.musteri_adi) {
-                notlar.push('Müşteri "' + v.musteri_adi + '" eşleşmedi, elle seçin');
-            }
-
-            hesapla();
-            durum.textContent = '✅ Dolduruldu. Lütfen kontrol edin' +
-                (notlar.length ? ' — ' + notlar.join('; ') : '') + '.';
-        }).catch(function(err) {
-            durum.textContent = '⚠️ Hata: ' + err;
-        }).finally(function() {
-            btn.disabled = false;
-        });
+        var file = dosya.files[0];
+        var ad = (file.name || '').toLowerCase();
+        if (ad.endsWith('.xml') || ad.endsWith('.pdf')) {
+            belgedenOku(file);
+        } else {
+            fotograftanOku(file);
+        }
     });
 })();
 </script>

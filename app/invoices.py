@@ -36,6 +36,18 @@ _FATURA_OKU_ISTEMI = (
 )
 
 
+def _match_customer(repo, musteri_adi):
+    """Okunan satıcı/müşteri adını mevcut müşterilerle eşleştirir; id|None."""
+    ad = (musteri_adi or "").strip().lower()
+    if not ad:
+        return None
+    for m in repo.customer_options():
+        unvan = (m["unvan"] or "").lower()
+        if unvan and (ad in unvan or unvan in ad):
+            return m["id"]
+    return None
+
+
 @invoices_bp.route("/oku", methods=["POST"])
 @login_required
 def oku():
@@ -50,17 +62,61 @@ def oku():
     if hata:
         return jsonify({"ok": False, "hata": hata}), 502
 
-    # Müşteri adını mevcut müşterilerle eşleştirmeye çalış
-    musteri_id = None
-    ad = (veri.get("musteri_adi") or "").strip().lower()
-    if ad:
-        for m in get_repo().customer_options():
-            unvan = (m["unvan"] or "").lower()
-            if unvan and (ad in unvan or unvan in ad):
-                musteri_id = m["id"]
-                break
+    musteri_id = _match_customer(get_repo(), veri.get("musteri_adi"))
+    return jsonify({"ok": True, "veri": veri, "musteri_id": musteri_id, "kaynak": "ai"})
 
-    return jsonify({"ok": True, "veri": veri, "musteri_id": musteri_id})
+
+# Yüklenen belge için makul üst sınır (10 MB)
+_MAX_BELGE_BYTES = 10 * 1024 * 1024
+
+
+@invoices_bp.route("/belge-yukle", methods=["POST"])
+@login_required
+def belge_yukle():
+    """e-Fatura/e-Arşiv belgesini (XML/PDF) KODLA okur; gerekirse AI'ya düşer.
+
+    - .xml  → UBL-TR parse (kesin, ücretsiz)
+    - .pdf  → gömülü XML varsa parse (kesin); yoksa ilk sayfa görseli → AI vision
+    Yanıt fotoğraf yolu (`oku`) ile aynı şekildedir: {ok, veri, musteri_id, kaynak}.
+    """
+    f = request.files.get("dosya")
+    if not f or not f.filename:
+        return jsonify({"ok": False, "hata": "Belge seçilmedi."}), 400
+
+    raw = f.read()
+    if not raw:
+        return jsonify({"ok": False, "hata": "Belge boş."}), 400
+    if len(raw) > _MAX_BELGE_BYTES:
+        return jsonify({"ok": False, "hata": "Belge 10 MB'tan büyük olamaz."}), 400
+
+    ad = f.filename.lower()
+    from . import efatura
+
+    if ad.endswith(".xml"):
+        try:
+            veri = efatura.parse_ubl_xml(raw)
+        except ValueError as e:
+            return jsonify({"ok": False, "hata": str(e)}), 400
+        kaynak = "xml"
+    elif ad.endswith(".pdf"):
+        veri, image_url, hata = efatura.read_pdf(raw)
+        if hata:
+            return jsonify({"ok": False, "hata": hata}), 400
+        if veri is not None:
+            kaynak = "pdf-xml"
+        else:
+            # Gömülü XML yok → görseli AI vision ile oku
+            from .ai import vision_json
+            veri, hata = vision_json(image_url, _FATURA_OKU_ISTEMI)
+            if hata:
+                return jsonify({"ok": False, "hata": hata}), 502
+            kaynak = "ai"
+    else:
+        return jsonify({"ok": False,
+                        "hata": "Yalnızca .xml veya .pdf desteklenir."}), 400
+
+    musteri_id = _match_customer(get_repo(), veri.get("musteri_adi"))
+    return jsonify({"ok": True, "veri": veri, "musteri_id": musteri_id, "kaynak": kaynak})
 
 
 @invoices_bp.route("/")
